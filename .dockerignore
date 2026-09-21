@@ -17,9 +17,9 @@ backend/.venv/
 # Supabase CLI temp
 supabase/.temp/
 
-# Archivos descargados/generados
-*.pdf
-*.html
+# Archivos descargados/generados (solo en la raíz)
+/*.pdf
+/*.html
 
 # Windows
 Thumbs.db

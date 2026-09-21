@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Planilla de Guardia - {{ mes_nombre }} {{ anio }}</title>
+<style>
+    @page {
+        size: A4 landscape;
+        margin: 0.45cm;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #000;
+        background: #fff;
+        margin: 0;
+        padding: 0;
+    }
+
+    .contenedor-encabezado {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .logo-izq, .logo-der {
+        height: 75px;
+        width: auto;
+        object-fit: contain;
+    }
+
+    .encabezado-texto {
+        text-align: center;
+        flex-grow: 1;
+        padding: 0 20px;
+    }
+
+    .encabezado-texto p {
+        margin: 0 0 5px 0;
+        font-size: 14px;
+        font-weight: bold;
+    }
+
+    .encabezado-texto .titulo {
+        text-decoration: underline;
+        font-size: 16px;
+        margin-bottom: 0;
+    }
+
+    .tabla-contenedor { width: 100%; overflow: hidden; }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        page-break-inside: avoid;
+    }
+
+    th, td {
+        border: 1px solid #000;
+        text-align: center;
+        vertical-align: middle;
+        padding: 2px 1px;
+        font-size: 6.6pt;
+        line-height: 1.1;
+        height: 20px;
+    }
+
+    thead th { font-weight: bold; background: #fff; }
+
+    .col-nombre { width: 18%; text-align: left; padding-left: 4px; }
+    .col-ci     { width: 7%; }
+    .col-reg    { width: 6%; }
+    .col-horario{ width: 10%; }
+    .col-dia    { width: auto; min-width: 15px; }
+
+    td.nombre-borde     { text-align: left; white-space: nowrap; font-size: 6.7pt; }
+    td.celda-turno      { font-size: 6.6pt; }
+    td.celda-vacaciones {
+        font-size: 6.5pt;
+        font-weight: bold;
+        font-style: italic;
+        text-align: center;
+        vertical-align: middle;
+        background-color: #fff !important;
+        border: 2px solid #000 !important;
+        white-space: normal;
+        line-height: 1.2;
+        padding: 3px;
+    }
+
+    .dia-semana { font-size: 5.8pt; height: 16px; }
+    .numero-dia { font-size: 6.5pt; height: 17px; }
+
+    .observacion {
+        margin-top: 12px;
+        font-size: 7pt;
+        font-weight: bold;
+    }
+
+    .firmas {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin-top: 42px;
+        page-break-inside: avoid;
+    }
+
+    .firma {
+        width: 32%;
+        text-align: center;
+        font-size: 7pt;
+        padding-top: 4px;
+    }
+
+    .linea-firma { border-top: 1px solid #000; margin-bottom: 5px; }
+</style>
+</head>
+<body>
+
+<div class="contenedor-encabezado">
+    <img src="logo_izq.jpg" class="logo-izq" alt="Logo MSPBS">
+    <div class="encabezado-texto">
+        <p>{{ institucion }}</p>
+        <p>{{ institucion_sub }}</p>
+        <p class="titulo">PLANILLA DE GUARDIA {{ titulo }} MES DE {{ mes_nombre }} AÑO {{ anio }}</p>
+    </div>
+    <img src="logo_der.jpg" class="logo-der" alt="Logo INERAM">
+</div>
+
+<div class="tabla-contenedor">
+<table>
+    <thead>
+        <tr>
+            <th rowspan="2" class="col-nombre">Nombre y Apellido</th>
+            <th rowspan="2" class="col-ci">C.I. N°</th>
+            <th rowspan="2" class="col-reg">Reg. N°</th>
+            <th rowspan="2" class="col-horario">HORARIO</th>
+            {% for dia in dias %}<th class="col-dia dia-semana">{{ dias_semana_es[dia.weekday()] }}</th>{% endfor %}
+        </tr>
+        <tr>
+            {% for dia in dias %}<th class="col-dia numero-dia">{{ dia.day }}</th>{% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for fila in filas %}
+        <tr>
+            <td class="nombre-borde">{{ fila.nombre }}</td>
+            <td>{{ fila.ci }}</td>
+            <td>{{ fila.registro }}</td>
+            <td>{{ fila.horario }}</td>
+            {% for celda in fila.celdas %}
+                {% if celda.tipo is defined and celda.tipo == 'vacaciones' %}
+                <td class="celda-vacaciones" colspan="{{ celda.colspan }}">{{ celda.texto }}</td>
+                {% elif celda %}
+                <td class="celda-turno">{{ celda.valor }}</td>
+                {% endif %}
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<div class="observacion">
+    {{ observacion }}
+</div>
+
+<div class="firmas">
+    {% for nombre, cargo in firmas %}
+    <div class="firma">
+        <div class="linea-firma"></div>
+        <strong>{{ nombre }}</strong><br>
+        {{ cargo }}
+    </div>
+    {% endfor %}
+</div>
+
+</body>
+</html>
