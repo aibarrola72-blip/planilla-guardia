@@ -24,6 +24,9 @@ app/android/app/*.jks
 Thumbs.db
 Desktop.ini
 
+# Estado local del CLI de Supabase
+supabase/.temp/
+
 # Archivos generados/descargados
 *.pdf
 *.html

@@ -6,10 +6,10 @@ class AppConfig {
   AppConfig._();
 
   /// URL del proyecto Supabase (Settings > API).
-  static const String supabaseUrl = 'https://TU-PROYECTO.supabase.co';
+  static const String supabaseUrl = 'https://oaiehscsncuyrfeqfhas.supabase.co';
 
   /// Clave pública (anon key) de Supabase.
-  static const String supabaseAnonKey = 'TU_ANON_KEY';
+  static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9haWVoc2NzbmN1eXJmZXFmaGFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwMjA5MDgsImV4cCI6MjEwNTU5NjkwOH0.8IJrijsRgCUC0yYrPrTvg4DoeUxMcTYSvmP8sJpBIg8';
 
   /// URL base del backend de reportes (FastAPI, p. ej. en Render/Railway).
   static const String apiReportesUrl = 'http://127.0.0.1:8000';

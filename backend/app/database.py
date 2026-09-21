@@ -99,14 +99,12 @@ def obtener_libres_descargados() -> list[dict]:
     return _get("libres", {"select": "id,persona_id,fecha_inicio,fecha_fin,motivo"})
 
 def obtener_plan_para(fecha_desde: str, fecha_hasta: str) -> list[dict]:
-    return _get(
-        "plan_mensual",
-        {
-            "select": "id,persona_id,fecha,turno_id,turno: turnos(codigo)",
-            "fecha": f"gte.{fecha_desde}",
-            "fecha_hasta": f"lte.{fecha_hasta}",
-        },
-    )
+    params = [
+        ("select", "id,persona_id,fecha,turno_id,turno: turnos(codigo)"),
+        ("fecha", f"gte.{fecha_desde}"),
+        ("fecha", f"lte.{fecha_hasta}"),
+    ]
+    return _get("plan_mensual", params)
 
 
 def guardar_plan_mensual(filas: list[dict]) -> list[dict] | None:

@@ -63,6 +63,8 @@ def enviar(tabla: str, filas: list[dict]) -> None:
     }
     if filas:
         resp = requests.post(url, headers=headers, json=filas, timeout=120)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Error {resp.status_code} en {tabla}: {resp.text[:2000]}")
         resp.raise_for_status()
 
 
@@ -79,6 +81,12 @@ def leer(tabla: str) -> list[dict]:
 
 def normalizar_ci(v) -> str:
     return "".join(ch for ch in str(v or "") if ch.isdigit())
+
+
+def normalizar_nombre(v) -> str:
+    import unicodedata
+    s = str(v or "").strip().lower()
+    return "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
 
 
 def parsear_fecha(v) -> date | None:
@@ -171,9 +179,11 @@ def main() -> None:
 
     personas_db = leer("personas")
     personas_por_ci = {}
+    personas_por_nombre = {}
     for p in personas_db:
         ci = normalizar_ci(p.get("ci") or "")
         personas_por_ci.setdefault(ci, p["id"])
+        personas_por_nombre.setdefault(normalizar_nombre(p.get("nombre")), p["id"])
 
     # ---------- vacaciones ----------
     if leer("vacaciones"):
@@ -185,12 +195,16 @@ def main() -> None:
             reg = dict(zip(encabezado_v, fila))
             pid = personas_por_ci.get(normalizar_ci(reg.get("nroCI")))
             if pid is None:
+                pid = personas_por_nombre.get(normalizar_nombre(reg.get("PERSONAL")))
+            if pid is None:
                 print(f"  [aviso] vacación sin persona: {reg.get('PERSONAL')}")
                 continue
             ini = parsear_fecha(reg.get("FECHA INICIO"))
             fin = parsear_fecha(reg.get("FECHA FIN"))
             if not ini or not fin:
                 continue
+            if fin < ini:
+                ini, fin = fin, ini
             filas_vac.append({
                 "persona_id": pid,
                 "fecha_inicio": ini.isoformat(),
@@ -209,6 +223,8 @@ def main() -> None:
         for fila in libres_raw[1:]:
             reg = dict(zip(encabezado_l, fila))
             pid = personas_por_ci.get(normalizar_ci(reg.get("nroCI")))
+            if pid is None:
+                pid = personas_por_nombre.get(normalizar_nombre(reg.get("PERSONAL")))
             if pid is None:
                 continue
             fecha = parsear_fecha(reg.get("fecha"))
@@ -271,7 +287,7 @@ def main() -> None:
         enviar("plan_mensual", filas_plan)
         fechas = [f for _, f in fecha_cols]
         print(f"plan_mensual importado: {len(filas_plan)} celdas "
-              f"({min(fechas)} → {max(fechas)})")
+              f"({min(fechas)} - {max(fechas)})")
 
     print("Migración completada.")
 

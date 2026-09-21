@@ -4,26 +4,6 @@
 -- Ejecutar en el SQL Editor del proyecto, o como migración.
 -- ============================================================
 
--- ---------- Tipos y funciones auxiliares ----------
-
--- Indica si el usuario autenticado es jef@ de unidad.
-create or replace function public.es_jefe()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.perfiles p
-    where p.user_id = auth.uid()
-      and p.rol = 'jefe'
-  );
-$$;
-
-set check_function_bodies = off;
-
 -- ---------- Catálogos ----------
 
 create table public.unidades (
@@ -130,6 +110,22 @@ create table public.perfiles (
   created_at timestamptz not null default now(),
   unique (user_id)
 );
+
+-- Indica si el usuario autenticado es jef@ de unidad.
+create or replace function public.es_jefe()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.perfiles p
+    where p.user_id = auth.uid()
+      and p.rol = 'jefe'
+  );
+$$;
 
 -- Alta automática de perfil al crear un usuario en Supabase Auth.
 create or replace function public.handle_new_user()
