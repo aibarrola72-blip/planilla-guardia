@@ -1,0 +1,29 @@
+# Credenciales y secretos
+credenciales.json
+*.env
+.env*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+backend/.venv/
+
+# Flutter / Dart
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/*.iml
+app/.idea/
+app/.vscode/
+app/android/key.properties
+app/android/app/*.jks
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Archivos generados/descargados
+*.pdf
+*.html
