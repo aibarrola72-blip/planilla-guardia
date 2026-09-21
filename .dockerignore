@@ -1,0 +1,26 @@
+# Secretos y estado local
+credenciales.json
+backend/.env
+.git/
+.gitignore
+
+# App Flutter / Dart
+app/
+app/.dart_tool/
+app/build/
+
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+
+# Supabase CLI temp
+supabase/.temp/
+
+# Archivos descargados/generados
+*.pdf
+*.html
+
+# Windows
+Thumbs.db
+Desktop.ini

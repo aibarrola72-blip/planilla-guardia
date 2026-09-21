@@ -8,12 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /srv
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY templates ./templates
-COPY assets ./assets
+COPY backend/app ./app
+COPY backend/templates ./templates
+COPY backend/assets ./assets
 
 ENV PYTHONUNBUFFERED=1
 
