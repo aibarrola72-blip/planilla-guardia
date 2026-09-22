@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config.dart';
 import '../models/models.dart';
 
 /// Servicio de acceso a datos (PostgREST vía Supabase).
@@ -21,6 +22,15 @@ class SupabaseService {
 
   Future<AuthResponse> crearUsuario(String email, String password) =>
       _auth.signUp(email: email, password: password);
+
+  /// Envía el correo de restablecimiento de contraseña con destino a la app
+  /// vía deep link (ineramapp://auth/recuperar-contrasena).
+  Future<void> recuperarContrasena(String email) => _auth
+      .resetPasswordForEmail(email, redirectTo: AppConfig.authRedirectUrl);
+
+  /// Aplica la contraseña nueva durante la sesión de recuperación.
+  Future<void> restablecerContrasena(String nueva) => _auth
+      .updateUser(UserAttributes(password: nueva));
 
   void cerrarSesion() => _auth.signOut();
 

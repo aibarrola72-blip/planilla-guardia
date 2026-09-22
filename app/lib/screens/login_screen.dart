@@ -99,6 +99,34 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _cargando
                         ? null
                         : () async {
+                            final email = _email.text.trim();
+                            if (!email.contains('@')) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Ingresá tu correo arriba para restablecer')),
+                              );
+                              return;
+                            }
+                            final ok = await context
+                                .read<AppState>()
+                                .recuperarContrasena(email);
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  ok
+                                      ? 'Revisá tu correo: tocá el enlace y poné tu contraseña nueva.'
+                                      : context.read<AppState>().error ?? 'No se pudo enviar el correo',
+                                ),
+                              ),
+                            );
+                          },
+                    child: const Text('Olvidé mi contraseña'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _cargando
+                        ? null
+                        : () async {
                             final ok = await context
                                 .read<AppState>()
                                 .crearCuenta(_email.text.trim(), _password.text);

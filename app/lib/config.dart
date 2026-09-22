@@ -14,6 +14,11 @@ class AppConfig {
   /// URL base del backend de reportes (FastAPI, p. ej. en Render/Railway).
   static const String apiReportesUrl = 'https://ineram-reportes.onrender.com';
 
+  /// Deep link de la app para el correo de restablecimiento de contraseña
+  /// (debe coincidir con el intent-filter de AndroidManifest.xml y estar
+  /// habilitado en Supabase > Authentication > URL Configuration).
+  static const String authRedirectUrl = 'ineramapp://auth/recuperar-contrasena';
+
   /// Nombre del hospital que encabeza el reporte.
   static const String institucion = 'INSTITUTO NACIONAL DE ENFERMEDADES RESPIRATORIAS Y DEL AMBIENTE';
   static const String institucionSub = 'INERAM - "PROF. DR. JUAN MAX BOETTNER"';

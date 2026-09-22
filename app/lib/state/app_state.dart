@@ -57,6 +57,33 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Envía el correo de restablecimiento. Devuelve true si fue enviado.
+  Future<bool> recuperarContrasena(String email) async {
+    _error = null;
+    try {
+      await SupabaseService.instance.recuperarContrasena(email);
+      return true;
+    } on AuthException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Aplica la contraseña nueva (sesión de recuperación activa).
+  Future<bool> restablecerContrasena(String nueva) async {
+    _error = null;
+    try {
+      await SupabaseService.instance.restablecerContrasena(nueva);
+      notifyListeners();
+      return true;
+    } on AuthException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return false;
+    }
+  }
+
   void cerrarSesion() {
     SupabaseService.instance.cerrarSesion();
     _tieneSesion = false;
