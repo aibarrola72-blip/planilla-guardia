@@ -37,43 +37,57 @@ def health():
 
 @app.get("/")
 def raiz():
-    return {"servicio": "reportes-ineram", "endpoints": ["/api/reporte/mensual"]}
+    return {"servicio": "reportes-ineram", "endpoints": ["/api/reporte/mensual", "/reporte"]}
 
 
-@app.post("/api/reporte/mensual")
-def reporte_mensual(body: ReporteRequest):
-    try:
-        unidad_ids = list(body.unidad_ids)
-        sector_ids = list(body.sector_ids)
-
-        # Todo el plan del mes solicitado
-        _, total = calendar.monthrange(body.anio, body.mes)
-        desde = datetime(body.anio, body.mes, 1).date().isoformat()
-        hasta = datetime(body.anio, body.mes, total).date().isoformat()
-
-        datos = {
+def _generar(
+    anio: int,
+    mes: int,
+    unidad_ids: list[int],
+    sector_ids: list[int],
+    formato: str,
+) -> tuple[str | bytes, str]:
+    def _leer() -> dict:
+        _, total = calendar.monthrange(anio, mes)
+        desde = datetime(anio, mes, 1).date().isoformat()
+        hasta = datetime(anio, mes, total).date().isoformat()
+        return {
             "unidades": database.obtener_unidades(),
             "sectores": database.obtener_sectores(),
             "turnos": database.obtener_turnos(),
-            "personas": database.obtener_personas(unidad_ids, sector_ids),
+            "personas": database.obtener_personas(list(unidad_ids), list(sector_ids)),
             "vacaciones": database.obtener_vacaciones_descargadas(),
             "libres": database.obtener_libres_descargados(),
             "plan": database.obtener_plan_para(desde, hasta),
         }
+
+    try:
+        datos = _leer()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error leyendo datos: {exc}") from exc
 
     try:
-        contenido, media_type = reporte.generar_reporte(
-            anio=body.anio,
-            mes=body.mes,
+        return reporte.generar_reporte(
+            anio=anio,
+            mes=mes,
             datos=datos,
             unidad_ids=unidad_ids,
             sector_ids=sector_ids,
-            formato=body.formato,
+            formato=formato,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error generando reporte: {exc}") from exc
+
+
+@app.post("/api/reporte/mensual")
+def reporte_mensual(body: ReporteRequest):
+    contenido, media_type = _generar(
+        anio=body.anio,
+        mes=body.mes,
+        unidad_ids=body.unidad_ids,
+        sector_ids=body.sector_ids,
+        formato=body.formato,
+    )
 
     if isinstance(contenido, str):
         return HTMLResponse(content=contenido)
@@ -84,4 +98,33 @@ def reporte_mensual(body: ReporteRequest):
         content=contenido,
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{nombre}"'},
+    )
+
+
+@app.get("/reporte")
+def reporte_web(
+    anio: int,
+    mes: int,
+    formato: str = "html",
+    unidad_ids: str = "",
+    sector_ids: str = "",
+):
+    """Vista web de la planilla: /reporte?anio=2026&mes=9"""
+    def _desde_csv(value: str) -> list[int]:
+        return [int(x) for x in value.split(",") if x.strip()]
+
+    contenido, media_type = _generar(
+        anio=anio,
+        mes=mes,
+        unidad_ids=_desde_csv(unidad_ids),
+        sector_ids=_desde_csv(sector_ids),
+        formato=formato,
+    )
+
+    if isinstance(contenido, str):
+        return HTMLResponse(content=contenido)
+    return Response(
+        content=contenido,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=planilla_guardia_{anio}_{mes:02d}.pdf"},
     )
