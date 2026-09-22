@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Necesario para poder hablar con el backend. Sin él, TODO el tráfico
+         de red falla en builds release (SocketException / host lookup errno=7),
+         aunque el navegador funcione. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="ineram_app"
         android:name="${applicationName}"
