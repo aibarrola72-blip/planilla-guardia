@@ -1,4 +1,3 @@
-import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,27 +18,19 @@ Future<void> main() async {
     publishableKey: AppConfig.supabaseAnonKey,
   );
 
-  final appLinks = AppLinks();
-
-  // Deep link inicial (correo de recuperación tocado con la app cerrada).
-  final uri = await appLinks.getInitialLink();
-  if (uri != null) {
-    _procesarDeepLink(uri);
-  }
-
-  // Deep links en vivo (app ya abierta).
-  appLinks.uriLinkStream.listen(_procesarDeepLink);
+  // supabase_flutter ya observa deep links (iniciales y en vivo) por su cuenta:
+  // cuando llega un enlace de recuperación emite AuthChangeEvent.passwordRecovery.
+  Supabase.instance.client.auth.onAuthStateChange.listen((cambio) {
+    if (cambio.event == AuthChangeEvent.passwordRecovery) {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const RecuperarContrasenaScreen(),
+        ),
+      );
+    }
+  });
 
   runApp(const IneramApp());
-  escucharRecuperacion();
-}
-
-void _procesarDeepLink(Uri uri) {
-  try {
-    Supabase.instance.handleDeepLink(uri);
-  } catch (_) {
-    // Link inválido o no relacionado con login: se ignora.
-  }
 }
 
 class IneramApp extends StatelessWidget {
@@ -71,18 +62,4 @@ class PantallaRaiz extends StatelessWidget {
     final estado = context.watch<AppState>();
     return estado.tieneSesion ? const HomeScreen() : const LoginScreen();
   }
-}
-
-/// Escucha el evento "recovery" de Supabase: llegó un deep link de
-/// restablecimiento de contraseña. Muestra la pantalla para la contraseña nueva.
-void escucharRecuperacion() {
-  Supabase.instance.client.auth.onAuthStateChange.listen((cambio) {
-    if (cambio.event == AuthChangeEvent.recovery) {
-      navigatorKey.currentState?.push(
-        MaterialPageRoute<void>(
-          builder: (_) => const RecuperarContrasenaScreen(),
-        ),
-      );
-    }
-  });
 }
