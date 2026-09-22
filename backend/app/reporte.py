@@ -149,7 +149,7 @@ def construir_filas(
             if celda is None or celda["tipo"] != "dato":
                 continue
             cod = plan_x_persona.get(persona["id"], {}).get(dia)
-            if cod:
+            if cod and not celda["valor"]:
                 celda["valor"] = cod
 
         filas.append({

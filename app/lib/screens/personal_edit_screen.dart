@@ -99,7 +99,7 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
         title: Text(widget.persona == null ? 'Nuevo personal' : 'Editar personal'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewPadding.bottom + 24),
         child: Form(
           key: _form,
           child: Column(

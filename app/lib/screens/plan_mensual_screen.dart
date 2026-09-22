@@ -238,8 +238,9 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                     const Divider(),
                     Expanded(
                       child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
                           columnSpacing: 4,
                           headingRowHeight: 36,
                           columns: [
@@ -295,6 +296,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                                 ],
                               ),
                           ],
+                        ),
                         ),
                       ),
                     ),
