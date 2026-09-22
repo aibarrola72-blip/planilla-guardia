@@ -9,11 +9,11 @@ from __future__ import annotations
 import calendar
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from . import config, database, reporte
+from . import config, database, proxy, reporte
 
 app = FastAPI(
     title="Reportes INERAM",
@@ -38,6 +38,21 @@ def health():
 @app.get("/")
 def raiz():
     return {"servicio": "reportes-ineram", "endpoints": ["/api/reporte/mensual", "/reporte"]}
+
+
+# ---------------------------------------------------------------
+# Proxy hacia Supabase: la app apunta aquí su URL de Supabase para no
+# depender del DNS del proyecto (el teléfono solo resuelve este servidor).
+# ---------------------------------------------------------------
+for _servicio in ("rest", "auth", "storage"):
+
+    @app.api_route(
+        f"/{_servicio}/{{path:path}}",
+        methods=["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
+        include_in_schema=False,
+    )
+    async def _supabase_proxy(path: str, request: Request, servicio: str = _servicio):
+        return await proxy.reenviar(servicio, path, request)
 
 
 def _generar(

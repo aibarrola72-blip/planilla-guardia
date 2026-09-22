@@ -5,8 +5,12 @@
 class AppConfig {
   AppConfig._();
 
-  /// URL del proyecto Supabase (Settings > API).
-  static const String supabaseUrl = 'https://oaiehscsncuyrfeqfhas.supabase.co';
+  /// URL de Supabase que usa la app.
+  ///
+  /// Apunta al backend de reportes (proxy), que reenvía a Supabase:
+  /// el teléfono solo necesita resolver este host (el directo de Supabase
+  /// suele fallar con errno=7 en algunos celulares/redes).
+  static const String supabaseUrl = 'https://ineram-reportes.onrender.com';
 
   /// Clave pública (anon key) de Supabase.
   static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9haWVoc2NzbmN1eXJmZXFmaGFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwMjA5MDgsImV4cCI6MjEwNTU5NjkwOH0.8IJrijsRgCUC0yYrPrTvg4DoeUxMcTYSvmP8sJpBIg8';
