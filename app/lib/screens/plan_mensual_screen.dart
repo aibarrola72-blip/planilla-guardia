@@ -121,8 +121,24 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
           case 'D':
             if (esFinSemana) nuevas[_clave(p.id, dia)] = turno.id;
           case 'N1' || 'N2' || 'N3':
-            final indice = turno.codigo.codeUnitAt(1) - 49; // 1->0, 2->1, 3->2
-            if (dia % 3 == indice) nuevas[_clave(p.id, dia)] = turno.id;
+            final baseIdx = {'N1': 0, 'N2': 1, 'N3': 2}[turno.codigo]!;
+            final desde = p.nocheDesde;
+            final lineaInicial = p.nocheInicioLinea;
+            int indice;
+            if (desde != null &&
+                lineaInicial != null &&
+                {'N1', 'N2', 'N3'}.contains(lineaInicial)) {
+              // Rotación por ancla: línea del día = (línea_inicial + días
+              // desde el inicio) mod 3, con respeto al desfase entre meses.
+              final off = {'N1': 0, 'N2': 1, 'N3': 2}[lineaInicial]!;
+              final diff = DateTime.utc(_mes.year, _mes.month, dia)
+                  .difference(DateTime.utc(desde.year, desde.month, desde.day))
+                  .inDays;
+              indice = ((off + diff) % 3 + 3) % 3;
+            } else {
+              indice = turno.codigo.codeUnitAt(1) - 49; // 1->0, 2->1, 3->2
+            }
+            if (indice == baseIdx) nuevas[_clave(p.id, dia)] = turno.id;
         }
       }
     }
@@ -279,11 +295,11 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                                 cells: [
                                   DataCell(
                                     Tooltip(
-                                      message: p.nombre,
+                                      message: p.etiqueta,
                                       child: SizedBox(
-                                        width: 130,
+                                        width: 150,
                                         child: Text(
-                                          p.nombre,
+                                          p.etiqueta,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(fontSize: 12),
                                         ),

@@ -36,7 +36,9 @@ class SupabaseService {
     int? sectorId,
     bool incluirInactivos = false,
   }) async {
-    var query = _db.from('personas').select();
+    var query = _db
+        .from('personas')
+        .select('*, cargo:cargos(nombre), sector:sectores(nombre)');
 
     if (!incluirInactivos) query = query.eq('estado', 'ACTIVO');
     if (sectorId != null) query = query.eq('sector_id', sectorId);

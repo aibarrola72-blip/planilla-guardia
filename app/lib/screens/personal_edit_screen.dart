@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
@@ -34,8 +35,17 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
   late int? _sectorId;
   late int? _cargoId;
   late int? _turnoId;
+  DateTime? _nocheDesde;
+  String? _nocheInicioLinea;
   bool _activo = true;
   bool _guardando = false;
+
+  bool get _turnoBaseNocturno {
+    for (final t in widget.turnos) {
+      if (t.id == _turnoId && ['N1', 'N2', 'N3'].contains(t.codigo)) return true;
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -49,7 +59,19 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
     _sectorId = p?.sectorId;
     _cargoId = p?.cargoId;
     _turnoId = p?.turnoId;
+    _nocheDesde = p?.nocheDesde;
+    _nocheInicioLinea = p?.nocheInicioLinea;
     _activo = p?.estaActivo ?? true;
+  }
+
+  Future<void> _elegirNocheDesde() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _nocheDesde ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (d != null) setState(() => _nocheDesde = d);
   }
 
   @override
@@ -77,6 +99,10 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
           'turno_id': _turnoId,
           'estado': _activo ? 'ACTIVO' : 'INACTIVO',
           'orden': int.tryParse(_orden.text.trim()) ?? 0,
+          'noche_desde': _turnoBaseNocturno
+              ? (_nocheDesde?.toIso8601String().split('T').first)
+              : null,
+          'noche_inicio_linea': _turnoBaseNocturno ? _nocheInicioLinea : null,
         },
       );
       if (!mounted) return;
@@ -166,6 +192,43 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
                 ],
                 onChanged: (v) => setState(() => _turnoId = v),
               ),
+              if (_turnoBaseNocturno) ...[
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Inicio turno noche'),
+                  subtitle: Text(
+                    _nocheDesde == null
+                        ? 'Sin fecha de inicio (se deriva sola)'
+                        : 'Como $_nocheInicioLinea el ${DateFormat('dd/MM/yyyy').format(_nocheDesde!)}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Quitar fecha',
+                        onPressed: () => setState(() => _nocheDesde = null),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.calendar_month),
+                        tooltip: 'Elegir fecha de inicio',
+                        onPressed: _elegirNocheDesde,
+                      ),
+                    ],
+                  ),
+                ),
+                DropdownButtonFormField<String>(
+                  value: _nocheInicioLinea,
+                  decoration: const InputDecoration(labelText: 'Línea de inicio'),
+                  items: [
+                    const DropdownMenuItem(value: 'N1', child: Text('N1')),
+                    const DropdownMenuItem(value: 'N2', child: Text('N2')),
+                    const DropdownMenuItem(value: 'N3', child: Text('N3')),
+                  ],
+                  onChanged: (v) => setState(() => _nocheInicioLinea = v),
+                ),
+              ],
               const SizedBox(height: 16),
               TextFormField(
                 controller: _orden,

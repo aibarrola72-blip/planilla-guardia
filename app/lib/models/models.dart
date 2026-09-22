@@ -85,6 +85,10 @@ class Persona {
   final int? turnoId;
   final String estado;
   final int orden;
+  final String? cargoNombre;
+  final String? sectorNombre;
+  final DateTime? nocheDesde;
+  final String? nocheInicioLinea;
 
   const Persona({
     required this.id,
@@ -97,22 +101,40 @@ class Persona {
     this.turnoId,
     required this.estado,
     required this.orden,
+    this.cargoNombre,
+    this.sectorNombre,
+    this.nocheDesde,
+    this.nocheInicioLinea,
   });
 
   bool get estaActivo => estado == 'ACTIVO';
 
-  factory Persona.fromJson(Map<String, dynamic> json) => Persona(
-        id: json['id'] as int,
-        nombre: json['nombre'] as String? ?? '',
-        ci: json['ci'] as String? ?? '',
-        registro: json['registro'] as String? ?? '',
-        unidadId: json['unidad_id'] as int?,
-        sectorId: json['sector_id'] as int?,
-        cargoId: json['cargo_id'] as int?,
-        turnoId: json['turno_id'] as int?,
-        estado: json['estado'] as String? ?? 'ACTIVO',
-        orden: json['orden'] as int? ?? 0,
-      );
+  factory Persona.fromJson(Map<String, dynamic> json) {
+    final cargo = json['cargo'];
+    final sector = json['sector'];
+    final nocheDesde = json['noche_desde'] as String?;
+    return Persona(
+      id: json['id'] as int,
+      nombre: json['nombre'] as String? ?? '',
+      ci: json['ci'] as String? ?? '',
+      registro: json['registro'] as String? ?? '',
+      unidadId: json['unidad_id'] as int?,
+      sectorId: json['sector_id'] as int?,
+      cargoId: json['cargo_id'] as int?,
+      turnoId: json['turno_id'] as int?,
+      estado: json['estado'] as String? ?? 'ACTIVO',
+      orden: json['orden'] as int? ?? 0,
+      cargoNombre: (cargo is Map) ? (cargo['nombre'] as String?) : null,
+      sectorNombre: (sector is Map) ? (sector['nombre'] as String?) : null,
+      nocheDesde: nocheDesde == null ? null : DateTime.parse(nocheDesde),
+      nocheInicioLinea: json['noche_inicio_linea'] as String?,
+    );
+  }
+
+  /// Nombre para la planilla/menú: "Nombre + Cargo + Sector".
+  String get etiqueta => [nombre, cargoNombre ?? '', sectorNombre ?? '']
+      .where((s) => s.isNotEmpty)
+      .join(' ');
 
   Map<String, dynamic> toMap() => {
         'nombre': nombre,
@@ -124,6 +146,8 @@ class Persona {
         'turno_id': turnoId,
         'estado': estado,
         'orden': orden,
+        'noche_desde': nocheDesde?.toIso8601String().split('T').first,
+        'noche_inicio_linea': nocheInicioLinea,
       };
 }
 
