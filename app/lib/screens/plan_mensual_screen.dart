@@ -31,6 +31,8 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
   // clave: "personaId|fecha" -> id de turno asignado (0 = sin turno)
   Map<String, int> _celdas = {};
 
+  List<AusenciaRango> _libres = [];
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +58,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
       final personas = resultados[0] as List<Persona>;
       final turnos = resultados[1] as List<Turno>;
       final plan = resultados[2] as List<Map<String, dynamic>>;
+      final libres = await _svc.ausencias('libres');
 
       final celdas = <String, int>{};
       for (final fila in plan) {
@@ -72,6 +75,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
         _codigoTurno = {for (final t in turnos) t.id: t.codigo};
         _turnoPorId = {for (final t in turnos) t.id: t};
         _celdas = celdas;
+        _libres = libres;
         _cargando = false;
       });
     } catch (e) {
@@ -89,6 +93,15 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
 
   String _fecha(int dia) => DateTime(_mes.year, _mes.month, dia).toIso8601String().split('T').first;
 
+  bool _esLibre(int personaId, int dia) {
+    final d = DateTime(_mes.year, _mes.month, dia);
+    for (final l in _libres) {
+      if (l.personaId != personaId) continue;
+      if (!d.isBefore(l.inicio) && !d.isAfter(l.fin)) return true;
+    }
+    return false;
+  }
+
   /// Autocompletado base desde el turno base de cada persona.
   void _autocompletar() {
     final nuevas = <String, int>{};
@@ -97,6 +110,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
       if (turno == null) continue;
 
       for (var dia = 1; dia <= _diasDelMes; dia++) {
+        if (_esLibre(p.id, dia)) continue;
         final fecha = DateTime(_mes.year, _mes.month, dia);
         final diaSemana = fecha.weekday; // 1=lun ... 7=dom
         final esFinSemana = diaSemana == 6 || diaSemana == 7;
@@ -148,9 +162,10 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
     final elegido = await showModalBottomSheet<int?>(
       context: context,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             const ListTile(title: Text('Asignar turno', style: TextStyle(fontWeight: FontWeight.bold))),
             ListTile(
               title: const Text('Sin turno'),
@@ -166,6 +181,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                 onTap: () => Navigator.pop(ctx, t.id),
               ),
           ],
+          ),
         ),
       ),
     );
@@ -275,24 +291,43 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                                     ),
                                   ),
                                   for (var dia = 1; dia <= dias; dia++)
-                                    DataCell(
-                                      InkWell(
-                                        onTap: _esMesPasado ? null : () => _seleccionarTurno(p.id, dia),
-                                        child: Container(
-                                          width: 28,
-                                          height: 28,
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            border: Border.all(color: Colors.grey.shade300),
-                                            borderRadius: BorderRadius.circular(4),
+                                  DataCell(
+                                    InkWell(
+                                      onTap: _esMesPasado || _esLibre(p.id, dia)
+                                          ? null
+                                          : () => _seleccionarTurno(p.id, dia),
+                                      child: Container(
+                                        width: 28,
+                                        height: 28,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: _esLibre(p.id, dia)
+                                              ? Colors.amber.shade100
+                                              : null,
+                                          border: Border.all(
+                                            color: _esLibre(p.id, dia)
+                                                ? Colors.amber
+                                                : Colors.grey.shade300,
                                           ),
-                                          child: Text(
-                                            _codigoTurno[_celdas[_clave(p.id, dia)]] ?? '',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          _esLibre(p.id, dia)
+                                              ? 'L'
+                                              : (_codigoTurno[
+                                                      _celdas[_clave(p.id, dia)]] ??
+                                                  ''),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: _esLibre(p.id, dia)
+                                                ? Colors.brown.shade700
+                                                : null,
                                           ),
                                         ),
                                       ),
                                     ),
+                                  ),
                                 ],
                               ),
                           ],
