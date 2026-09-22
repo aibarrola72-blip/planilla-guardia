@@ -119,6 +119,12 @@ def construir_filas(
         if turno_base_codigo:
             hora_base = horario_turno.get(turno_base_codigo, "")
 
+        cargo_nombre = (persona.get("cargo") or {}).get("nombre") or ""
+        sector_nombre = (persona.get("sector") or {}).get("nombre") or ""
+        nombre_completo = " ".join(
+            parte for parte in [persona["nombre"], cargo_nombre, sector_nombre] if parte
+        )
+
         celdas = [{"tipo": "dato", "valor": ""} for _ in range(n)]
 
         # 1) Vacaciones
@@ -153,7 +159,7 @@ def construir_filas(
                 celda["valor"] = cod
 
         filas.append({
-            "nombre": persona["nombre"],
+            "nombre": nombre_completo,
             "ci": persona.get("ci") or "",
             "registro": persona.get("registro") or "",
             "horario": hora_base,

@@ -81,7 +81,7 @@ def obtener_personas(unidad_ids: list[int], sector_ids: list[int], incluir_inact
         "select": "id,idpersonal_legacy,nombre,ci,registro,estado,orden,"
                   "unidad_id,sector_id,cargo_id,turno_id,"
                   "sector: sectores(nombre), cargo: cargos(nombre), turno: turnos(codigo)",
-        "order": "sector_id.nullsfirst,orden,nombre",
+        "order": "unidad_id.nullsfirst,sector_id.nullsfirst,orden,nombre",
     }
     if not incluir_inactivos:
         params["estado"] = "eq.ACTIVO"
