@@ -88,6 +88,19 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Invita a un nuevo jefe por correo. Devuelve true si fue enviado.
+  Future<bool> invitarJefe(String email) async {
+    _error = null;
+    try {
+      await SupabaseService.instance.invitarJefe(email);
+      return true;
+    } catch (e) {
+      _error = 'Error al invitar: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   void cerrarSesion() {
     SupabaseService.instance.cerrarSesion();
     _tieneSesion = false;

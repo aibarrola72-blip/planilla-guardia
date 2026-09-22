@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
@@ -31,6 +34,28 @@ class SupabaseService {
   /// Aplica la contraseña nueva durante la sesión de recuperación.
   Future<void> restablecerContrasena(String nueva) => _auth
       .updateUser(UserAttributes(password: nueva));
+
+  /// Invita a un nuevo jefe por correo. El enlace del correo abre la app
+  /// (deep link) gracias al redirect configurado en el backend.
+  Future<void> invitarJefe(String email) async {
+    final sesion = _auth.currentSession;
+    if (sesion == null) {
+      throw const FormatException('Sesión no iniciada');
+    }
+    final resp = await http
+        .post(
+          Uri.parse('${AppConfig.apiReportesUrl}/api/invitar'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${sesion.accessToken}',
+          },
+          body: jsonEncode({'email': email}),
+        )
+        .timeout(const Duration(seconds: 60));
+    if (resp.statusCode != 200) {
+      throw Exception('Backend respondió ${resp.statusCode}: ${resp.body}');
+    }
+  }
 
   void cerrarSesion() => _auth.signOut();
 

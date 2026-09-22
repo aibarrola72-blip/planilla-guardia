@@ -32,3 +32,8 @@ MESES_ES = [
 ]
 
 DIAS_SEMANA_ES = ["L", "M", "MI", "J", "V", "S", "D"]
+
+# Deep link de la app al que apuntan los correos de Supabase (invitaciones,
+# confirmación y recuperación de contraseña). Debe estar en la lista de
+# "Redirect URLs" de Authentication > URL Configuration del proyecto.
+AUTH_REDIRECT_URL = "ineramapp://auth/recuperar-contrasena"

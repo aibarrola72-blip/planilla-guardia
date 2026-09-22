@@ -11,6 +11,39 @@ import 'reporte_screen.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  Future<void> _mostrarDialogoInvitar(BuildContext context) async {
+    final control = TextEditingController();
+    final appState = context.read<AppState>();
+    final material = ScaffoldMessenger.of(context);
+
+    final enviar = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Invitar nuevo jefe'),
+        content: TextField(
+          controller: control,
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Correo electrónico'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop('enviar'), child: const Text('Enviar')),
+        ],
+      ),
+    );
+
+    final email = control.text.trim();
+    if (enviar != 'enviar' || email.isEmpty) return;
+
+    final ok = await appState.invitarJefe(email);
+    material.showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Invitación enviada a $email' : appState.error ?? 'Error al invitar'),
+      ),
+    );
+  }
+
   static const _modulos = [
     (icono: Icons.group_outlined, titulo: 'Personal', ruta: PersonalListScreen()),
     (icono: Icons.settings_outlined, titulo: 'Catálogos', ruta: CatalogosScreen()),
@@ -30,10 +63,15 @@ class HomeScreen extends StatelessWidget {
         title: const Text('Planilla de Guardia'),
         actions: [
           PopupMenuButton<String>(
-            onSelected: (v) {
-              if (v == 'salir') context.read<AppState>().cerrarSesion();
+            onSelected: (v) async {
+              if (v == 'invitar') {
+                await _mostrarDialogoInvitar(context);
+              } else if (v == 'salir') {
+                context.read<AppState>().cerrarSesion();
+              }
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'invitar', child: ListTile(leading: Icon(Icons.person_add_outlined), title: Text('Invitar jefe'))),
               PopupMenuItem(value: 'salir', child: ListTile(leading: Icon(Icons.logout), title: Text('Salir'))),
             ],
           ),

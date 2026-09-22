@@ -9,6 +9,7 @@ from __future__ import annotations
 import calendar
 from datetime import datetime
 
+import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
@@ -53,6 +54,58 @@ for _servicio in ("rest", "auth", "storage"):
     )
     async def _supabase_proxy(path: str, request: Request, servicio: str = _servicio):
         return await proxy.reenviar(servicio, path, request)
+
+
+# ---------------------------------------------------------------
+# Invitación de jefe: genera la invitación de Supabase con redirect hacia
+# la app (ineramapp://...) para que el correo abra la app, no una página
+# inválida de Supabase.
+# ---------------------------------------------------------------
+class InvitarRequest(BaseModel):
+    email: str = Field(min_length=3)
+
+
+@app.post("/api/invitar")
+def invitar_jefe(body: InvitarRequest, request: Request):
+    cabecera = request.headers.get("Authorization", "")
+    if not cabecera.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Sesión requerida")
+    token = cabecera[7:]
+
+    # Validar el JWT del jefe contra GoTrue antes de invitaciones.
+    try:
+        resp_usuario = requests.get(
+            f"{config.SUPABASE_URL}/auth/v1/user",
+            headers={"apikey": config.SUPABASE_ANON_KEY, "Authorization": f"Bearer {token}"},
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"No se pudo validar la sesión: {exc}") from exc
+    if resp_usuario.status_code != 200:
+        raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
+
+    try:
+        resp = requests.post(
+            f"{config.SUPABASE_URL}/auth/v1/admin/generate_link",
+            headers={
+                "apikey": config.SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {config.SUPABASE_SERVICE_ROLE_KEY}",
+            },
+            json={
+                "type": "invite",
+                "email": body.email,
+                "options": {"redirect_to": config.AUTH_REDIRECT_URL},
+            },
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"No se pudo contactar Supabase: {exc}") from exc
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Supabase respondió {resp.status_code}: {resp.text[:200]}",
+        )
+    return {"ok": True, "email": body.email}
 
 
 def _generar(
