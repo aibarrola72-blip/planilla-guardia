@@ -47,6 +47,7 @@ class SupabaseService {
           Uri.parse('${AppConfig.apiReportesUrl}/api/invitar'),
           headers: {
             'Content-Type': 'application/json',
+            'apikey': AppConfig.supabaseAnonKey,
             'Authorization': 'Bearer ${sesion.accessToken}',
           },
           body: jsonEncode({'email': email}),

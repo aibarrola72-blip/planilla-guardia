@@ -73,10 +73,13 @@ def invitar_jefe(body: InvitarRequest, request: Request):
     token = cabecera[7:]
 
     # Validar el JWT del jefe contra GoTrue antes de invitaciones.
+    # Usamos el mismo apikey que manda la app (siempre correcto); solo si
+    # faltara, caemos a la clave anónima del entorno del servidor.
+    apikey_auth = request.headers.get("apikey") or config.SUPABASE_ANON_KEY
     try:
         resp_usuario = requests.get(
             f"{config.SUPABASE_URL}/auth/v1/user",
-            headers={"apikey": config.SUPABASE_ANON_KEY, "Authorization": f"Bearer {token}"},
+            headers={"apikey": apikey_auth, "Authorization": f"Bearer {token}"},
             timeout=30,
         )
     except requests.RequestException as exc:
