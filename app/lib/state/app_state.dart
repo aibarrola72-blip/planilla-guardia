@@ -67,6 +67,10 @@ class AppState extends ChangeNotifier {
       _error = e.message;
       notifyListeners();
       return false;
+    } catch (e) {
+      _error = 'Sin conexión: no se pudo contactar al servidor. Revisá el internet del celular ($e)';
+      notifyListeners();
+      return false;
     }
   }
 
