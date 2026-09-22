@@ -66,20 +66,37 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
     }
   }
 
-  Future<void> _mover(int index, List<Persona> lista) async {
-    final destino = index - 1;
-    if (destino >= 0) {
-      await _svc.moverOrden(lista[index], lista[destino]);
-      await _cargarTodo();
-    }
+  static const _grupoTurno = {'M': 0, 'T': 1, 'N1': 2, 'N2': 3, 'N3': 4, 'D': 5};
+
+  int _grupo(Persona p) => _grupoTurno[p.turnoCodigo] ?? 6;
+
+  bool _mismoGrupo(Persona a, Persona b) =>
+      _grupo(a) == _grupo(b) && (a.unidadId ?? 0) == (b.unidadId ?? 0);
+
+  Future<void> _subir(int index) async {
+    if (index <= 0) return;
+    await _moverYRenumerar(index, index - 1);
   }
 
-  Future<void> _bajar(int index, List<Persona> lista) async {
-    final destino = index + 1;
-    if (destino < lista.length) {
-      await _svc.moverOrden(lista[index], lista[destino]);
-      await _cargarTodo();
+  Future<void> _bajar(int index) async {
+    if (index >= _personas.length - 1) return;
+    await _moverYRenumerar(index, index + 1);
+  }
+
+  Future<void> _moverYRenumerar(int origen, int destino) async {
+    if (!_mismoGrupo(_personas[origen], _personas[destino])) return;
+    final lista = List.of(_personas);
+    final item = lista.removeAt(origen);
+    lista.insert(destino, item);
+    try {
+      await _svc.renumerarOrden(lista);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo reordenar')));
+      }
+      return;
     }
+    await _cargarTodo();
   }
 
   @override
@@ -200,11 +217,11 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
                                 ),
                               IconButton(
                                 icon: const Icon(Icons.arrow_upward),
-                                onPressed: () => _mover(i, _personas),
+                                onPressed: () => _subir(i),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.arrow_downward),
-                                onPressed: () => _bajar(i, _personas),
+                                onPressed: () => _bajar(i),
                               ),
                             ],
                           ),

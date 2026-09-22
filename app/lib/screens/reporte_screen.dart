@@ -21,6 +21,10 @@ class ReporteScreen extends StatefulWidget {
 class _ReporteScreenState extends State<ReporteScreen> {
   final _svc = SupabaseService.instance;
   final _meses = const ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  final _mesesLargo = const [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  ];
 
   int _anio = DateTime.now().year;
   int _mes = DateTime.now().month;
@@ -76,7 +80,10 @@ class _ReporteScreenState extends State<ReporteScreen> {
       }
 
       final dir = await getTemporaryDirectory();
-      final archivo = File('${dir.path}/planilla_guardia_${_anio}_${_mes.toString().padLeft(2, '0')}.pdf');
+      final unidadNombre = _unidadId == null
+          ? 'completa'
+          : (_unidades.where((u) => u.id == _unidadId).map((u) => u.nombre.toLowerCase()).firstOrNull ?? 'completa');
+      final archivo = File('${dir.path}/planilla $unidadNombre ${_mesesLargo[_mes - 1]} $_anio.pdf');
       await archivo.writeAsBytes(resp.bodyBytes);
 
       await Share.shareXFiles(

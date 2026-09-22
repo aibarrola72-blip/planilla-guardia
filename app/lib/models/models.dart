@@ -87,6 +87,7 @@ class Persona {
   final int orden;
   final String? cargoNombre;
   final String? sectorNombre;
+  final String? turnoCodigo;
   final DateTime? nocheDesde;
   final String? nocheInicioLinea;
 
@@ -103,6 +104,7 @@ class Persona {
     required this.orden,
     this.cargoNombre,
     this.sectorNombre,
+    this.turnoCodigo,
     this.nocheDesde,
     this.nocheInicioLinea,
   });
@@ -112,6 +114,7 @@ class Persona {
   factory Persona.fromJson(Map<String, dynamic> json) {
     final cargo = json['cargo'];
     final sector = json['sector'];
+    final turno = json['turno'];
     final nocheDesde = json['noche_desde'] as String?;
     return Persona(
       id: json['id'] as int,
@@ -126,6 +129,7 @@ class Persona {
       orden: json['orden'] as int? ?? 0,
       cargoNombre: (cargo is Map) ? (cargo['nombre'] as String?) : null,
       sectorNombre: (sector is Map) ? (sector['nombre'] as String?) : null,
+      turnoCodigo: (turno is Map) ? (turno['codigo'] as String?) : null,
       nocheDesde: nocheDesde == null ? null : DateTime.parse(nocheDesde),
       nocheInicioLinea: json['noche_inicio_linea'] as String?,
     );

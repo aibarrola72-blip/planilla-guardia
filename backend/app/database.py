@@ -92,11 +92,23 @@ def obtener_personas(unidad_ids: list[int], sector_ids: list[int], incluir_inact
     return _get("personas", params)
 
 
-def obtener_vacaciones_descargadas() -> list[dict]:
-    return _get("vacaciones", {"select": "id,persona_id,fecha_inicio,fecha_fin,observacion"})
+def obtener_vacaciones_descargadas(fecha_desde: str, fecha_hasta: str) -> list[dict]:
+    """Vacaciones que tocan el rango [desde, hasta] (evita el límite de 1000 filas)."""
+    params = [
+        ("select", "id,persona_id,fecha_inicio,fecha_fin,observacion"),
+        ("fecha_inicio", f"lte.{fecha_hasta}"),
+        ("fecha_fin", f"gte.{fecha_desde}"),
+    ]
+    return _get("vacaciones", params)
 
-def obtener_libres_descargados() -> list[dict]:
-    return _get("libres", {"select": "id,persona_id,fecha_inicio,fecha_fin,motivo"})
+def obtener_libres_descargados(fecha_desde: str, fecha_hasta: str) -> list[dict]:
+    """Libres que tocan el rango [desde, hasta] (evita el límite de 1000 filas)."""
+    params = [
+        ("select", "id,persona_id,fecha_inicio,fecha_fin,motivo"),
+        ("fecha_inicio", f"lte.{fecha_hasta}"),
+        ("fecha_fin", f"gte.{fecha_desde}"),
+    ]
+    return _get("libres", params)
 
 def obtener_plan_para(fecha_desde: str, fecha_hasta: str) -> list[dict]:
     params = [

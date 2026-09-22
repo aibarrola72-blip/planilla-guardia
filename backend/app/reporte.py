@@ -71,6 +71,13 @@ def _agrupar_vacaciones(celdas: list, indices: list[int], texto: str, total: int
         }
 
 
+def _grupo_turno(persona: dict) -> int:
+    """Orden de la planilla por tipo de turno: M, T, N1-3, D y otros al final."""
+    orden_turno = {"M": 0, "T": 1, "N1": 2, "N2": 3, "N3": 4, "D": 5}
+    codigo = (persona.get("turno") or {}).get("codigo")
+    return orden_turno.get(codigo, 6)
+
+
 def construir_filas(
     personas: list[dict],
     vacaciones: list[dict],
@@ -82,6 +89,20 @@ def construir_filas(
 ) -> tuple[list[dict], list[date]]:
     dias = dias_del_mes(anio, mes)
     n = len(dias)
+
+    # Orden de la planilla: primero por grupo de turno (mañana, tarde,
+    # noches 1-2-3, fin de semana) y dentro de cada grupo por unidad,
+    # número de orden y nombre.
+    personas = sorted(
+        personas,
+        key=lambda p: (
+            _grupo_turno(p),
+            p.get("unidad_id") is not None,
+            p.get("unidad_id") or 0,
+            p.get("orden") or 0,
+            p.get("nombre") or "",
+        ),
+    )
 
     codigo_turno = {t["id"]: t["codigo"] for t in turnos}
     horario_turno = {
@@ -189,12 +210,19 @@ def renderizar_html(filas: list[dict], dias: list[date], anio: int, mes: int, ti
     )
 
 
-def generar_pdf(html: str, anio: int, mes: int, sector_nombre: str) -> bytes:
+def generar_pdf(html: str, anio: int, mes: int, unidad_nombre: str) -> bytes:
     from weasyprint import HTML as WeasyHTML  # import diferido: opcional
 
     base_url = config.ASSETS_DIR
     documento = WeasyHTML(string=html, base_url=base_url)
     return documento.write_pdf()
+
+
+def nombre_archivo_pdf(unidad_nombre: str, anio: int, mes: int) -> str:
+    """Nombre de archivo sugerido: 'planilla urgencias octubre 2026.pdf'."""
+    slug = (unidad_nombre or "completa").lower()
+    mes_nombre = config.MESES_ES[mes - 1].lower()
+    return f"planilla {slug} {mes_nombre} {anio}.pdf"
 
 
 def generar_reporte(
@@ -204,16 +232,14 @@ def generar_reporte(
     unidad_ids: list[int],
     sector_ids: list[int],
     formato: str = "html",
-) -> tuple[str | bytes, str]:
+) -> tuple[str | bytes, str, str]:
     unidades_nombre = {
         u["id"]: u["nombre"] for u in datos["unidades"]
         if u["id"] in (unidad_ids or [u["id"] for u in datos["unidades"]])
     }
-    sectores_filtrados = [s for s in datos["sectores"] if not sector_ids or s["id"] in sector_ids]
-    sector_nombre = sectores_filtrados[0]["nombre"] if sectores_filtrados else ""
 
     unidad_nombre = " / ".join(unidades_nombre.values())
-    titulo = (unidad_nombre + (" - " if sector_nombre else "") + sector_nombre).strip()
+    titulo = unidad_nombre
 
     filas, dias = construir_filas(
         personas=datos["personas"],
@@ -229,10 +255,10 @@ def generar_reporte(
 
     if formato == "pdf":
         try:
-            pdf = generar_pdf(html, anio, mes, sector_nombre)
-            return pdf, "application/pdf"
+            pdf = generar_pdf(html, anio, mes, unidad_nombre)
+            return pdf, "application/pdf", unidad_nombre
         except Exception as exc:  # weasyprint no disponible -> HTML
             print(f"[aviso] No se pudo generar PDF ({exc}); se devuelve HTML.")
-            return html, "text/html"
+            return html, "text/html", unidad_nombre
 
-    return html, "text/html"
+    return html, "text/html", unidad_nombre

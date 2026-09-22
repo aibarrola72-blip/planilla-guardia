@@ -38,17 +38,29 @@ class SupabaseService {
   }) async {
     var query = _db
         .from('personas')
-        .select('*, cargo:cargos(nombre), sector:sectores(nombre)');
+        .select('*, cargo:cargos(nombre), sector:sectores(nombre), turno:turnos(codigo)');
 
     if (!incluirInactivos) query = query.eq('estado', 'ACTIVO');
     if (sectorId != null) query = query.eq('sector_id', sectorId);
     if (unidadId != null) query = query.eq('unidad_id', unidadId);
 
-    final datos = await query
-        .order('sector_id', nullsFirst: true)
-        .order('orden')
-        .order('nombre');
-    return datos.map((r) => Persona.fromJson(r)).toList();
+    final datos = await query.order('id');
+    final personas = datos.map((r) => Persona.fromJson(r)).toList();
+
+    // Orden de la planilla: grupos de turno (M, T, N1-3, D) y dentro
+    // por unidad, número de orden y nombre.
+    const grupoTurno = {'M': 0, 'T': 1, 'N1': 2, 'N2': 3, 'N3': 4, 'D': 5};
+    int grupo(Persona p) => grupoTurno[p.turnoCodigo] ?? 6;
+    personas.sort((a, b) {
+      final byGrupo = grupo(a).compareTo(grupo(b));
+      if (byGrupo != 0) return byGrupo;
+      final byUnidad = (a.unidadId ?? 0).compareTo(b.unidadId ?? 0);
+      if (byUnidad != 0) return byUnidad;
+      final byOrden = (a.orden).compareTo(b.orden);
+      if (byOrden != 0) return byOrden;
+      return a.nombre.compareTo(b.nombre);
+    });
+    return personas;
   }
 
   Future<void> guardarPersona({int? id, required Map<String, dynamic> campos}) async {
@@ -59,15 +71,12 @@ class SupabaseService {
     }
   }
 
-  /// Reordena: intercambia `orden` entre dos personas del mismo grupo.
-  Future<void> moverOrden(Persona a, Persona b) async {
-    final paquete = [
-      {'id': a.id, 'orden': b.orden},
-      {'id': b.id, 'orden': a.orden},
+  /// Reordena la lista completa asignando `orden` 1..n en el orden dado.
+  Future<void> renumerarOrden(List<Persona> lista) async {
+    final paquete = <Map<String, dynamic>>[
+      for (var i = 0; i < lista.length; i++) {'id': lista[i].id, 'orden': i + 1},
     ];
-    await _db
-        .from('personas')
-        .upsert(paquete, onConflict: 'id');
+    await _db.from('personas').upsert(paquete, onConflict: 'id');
   }
 
   // ---------- Catálogos ----------

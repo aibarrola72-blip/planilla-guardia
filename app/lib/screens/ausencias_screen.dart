@@ -19,16 +19,25 @@ class AusenciasScreen extends StatefulWidget {
 class _AusenciasScreenState extends State<AusenciasScreen> {
   final _svc = SupabaseService.instance;
   final _fmt = DateFormat('dd/MM/yyyy');
+  final _buscar = SearchController();
 
   bool _cargando = true;
   String? _error;
   List<AusenciaRango> _ausencias = [];
   List<Persona> _personas = [];
 
+  bool get _esLibre => widget.tabla == 'libres';
+
   @override
   void initState() {
     super.initState();
     _cargar();
+  }
+
+  @override
+  void dispose() {
+    _buscar.dispose();
+    super.dispose();
   }
 
   Future<void> _cargar() async {
@@ -62,8 +71,9 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
 
   Future<void> _agregar() async {
     int? personaId;
-    DateTime inicio = DateTime.now();
-    DateTime fin = DateTime.now();
+    Persona? seleccionado;
+    DateTime fecha = DateTime.now();
+    DateTime? hasta;
 
     await showDialog<void>(
       context: context,
@@ -71,50 +81,92 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             return AlertDialog(
-              title: Text('Nuevo ${widget.tabla == 'vacaciones' ? 'periodo de vacaciones' : 'periodo de libres'}'),
+              title: Text(_esLibre ? 'Nuevo día libre' : 'Nuevo periodo de vacaciones'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<int>(
-                    value: personaId,
-                    decoration: const InputDecoration(labelText: 'Personal'),
-                    items: _personas
-                        .map((p) => DropdownMenuItem(value: p.id, child: Text(p.nombre)))
-                        .toList(),
-                    onChanged: (v) => setLocal(() => personaId = v),
+                  SearchAnchor(
+                    searchController: _buscar,
+                    builder: (bctx, controller) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(seleccionado?.nombre ?? 'Seleccionar personal'),
+                      subtitle: seleccionado == null
+                          ? const Text('Tocá y escribí para filtrar por nombre o CI…')
+                          : Text('CI ${seleccionado!.ci}'),
+                      trailing: const Icon(Icons.search),
+                      onTap: () => controller.openView(),
+                    ),
+                    suggestionsBuilder: (sctx, controller) {
+                      final q = controller.text.trim().toLowerCase();
+                      final filtrados = _personas
+                          .where((p) =>
+                              q.isEmpty ||
+                              p.nombre.toLowerCase().contains(q) ||
+                              (p.ci.isNotEmpty && p.ci.contains(q)))
+                          .toList();
+                      return [
+                        for (final p in filtrados)
+                          ListTile(
+                            title: Text(p.nombre),
+                            subtitle: Text('CI ${p.ci}'),
+                            trailing: p.id == personaId ? const Icon(Icons.check) : null,
+                            onTap: () {
+                              controller.closeView(p.nombre);
+                              setLocal(() {
+                                personaId = p.id;
+                                seleccionado = p;
+                              });
+                            },
+                          ),
+                      ];
+                    },
                   ),
                   const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Desde'),
-                    subtitle: Text(_fmt.format(inicio)),
-                    trailing: const Icon(Icons.calendar_month),
-                    onTap: () async {
-                      final d = await _elegirDia(ctx, inicio);
-                      if (d != null) setLocal(() => inicio = d);
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Hasta'),
-                    subtitle: Text(_fmt.format(fin)),
-                    trailing: const Icon(Icons.calendar_month),
-                    onTap: () async {
-                      final d = await _elegirDia(ctx, fin);
-                      if (d != null) setLocal(() => fin = d);
-                    },
-                  ),
+                  if (_esLibre) ...[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Día libre'),
+                      subtitle: Text(_fmt.format(fecha)),
+                      trailing: const Icon(Icons.calendar_month),
+                      onTap: () async {
+                        final d = await _elegirDia(ctx, fecha);
+                        if (d != null) setLocal(() => fecha = d);
+                      },
+                    ),
+                  ] else ...[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Desde'),
+                      subtitle: Text(_fmt.format(fecha)),
+                      trailing: const Icon(Icons.calendar_month),
+                      onTap: () async {
+                        final d = await _elegirDia(ctx, fecha);
+                        if (d != null) setLocal(() => fecha = d);
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Hasta'),
+                      subtitle: Text(_fmt.format(hasta ?? fecha)),
+                      trailing: const Icon(Icons.calendar_month),
+                      onTap: () async {
+                        final d = await _elegirDia(ctx, hasta ?? fecha);
+                        if (d != null) setLocal(() => hasta = d);
+                      },
+                    ),
+                  ],
                 ],
               ),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
                 FilledButton(
                   onPressed: () async {
-                    if (personaId == null || fin.isBefore(inicio)) return;
+                    final fin = _esLibre ? fecha : (hasta ?? fecha);
+                    if (personaId == null || fin.isBefore(fecha)) return;
                     await _svc.guardarAusencia(
                       widget.tabla,
                       personaId: personaId!,
-                      inicio: inicio,
+                      inicio: fecha,
                       fin: fin,
                     );
                     if (ctx.mounted) Navigator.pop(ctx);
@@ -167,7 +219,11 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
                         final a = _ausencias[i];
                         return ListTile(
                           title: Text(_nombrePersona(a.personaId)),
-                          subtitle: Text('${_fmt.format(a.inicio)} → ${_fmt.format(a.fin)}'),
+                          subtitle: Text(
+                            a.inicio == a.fin
+                                ? _fmt.format(a.inicio)
+                                : '${_fmt.format(a.inicio)} → ${_fmt.format(a.fin)}',
+                          ),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline),
                             onPressed: () => _eliminar(a),

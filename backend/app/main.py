@@ -46,7 +46,7 @@ def _generar(
     unidad_ids: list[int],
     sector_ids: list[int],
     formato: str,
-) -> tuple[str | bytes, str]:
+) -> tuple[str | bytes, str, str]:
     def _leer() -> dict:
         _, total = calendar.monthrange(anio, mes)
         desde = datetime(anio, mes, 1).date().isoformat()
@@ -56,8 +56,8 @@ def _generar(
             "sectores": database.obtener_sectores(),
             "turnos": database.obtener_turnos(),
             "personas": database.obtener_personas(list(unidad_ids), list(sector_ids)),
-            "vacaciones": database.obtener_vacaciones_descargadas(),
-            "libres": database.obtener_libres_descargados(),
+            "vacaciones": database.obtener_vacaciones_descargadas(desde, hasta),
+            "libres": database.obtener_libres_descargados(desde, hasta),
             "plan": database.obtener_plan_para(desde, hasta),
         }
 
@@ -81,7 +81,7 @@ def _generar(
 
 @app.post("/api/reporte/mensual")
 def reporte_mensual(body: ReporteRequest):
-    contenido, media_type = _generar(
+    contenido, media_type, unidad_nombre = _generar(
         anio=body.anio,
         mes=body.mes,
         unidad_ids=body.unidad_ids,
@@ -91,9 +91,7 @@ def reporte_mensual(body: ReporteRequest):
 
     if isinstance(contenido, str):
         return HTMLResponse(content=contenido)
-    nombre = (
-        f"planilla_guardia_{body.anio}_{body.mes:02d}.pdf"
-    )
+    nombre = reporte.nombre_archivo_pdf(unidad_nombre, body.anio, body.mes)
     return Response(
         content=contenido,
         media_type="application/pdf",
@@ -113,7 +111,7 @@ def reporte_web(
     def _desde_csv(value: str) -> list[int]:
         return [int(x) for x in value.split(",") if x.strip()]
 
-    contenido, media_type = _generar(
+    contenido, media_type, unidad_nombre = _generar(
         anio=anio,
         mes=mes,
         unidad_ids=_desde_csv(unidad_ids),
@@ -123,8 +121,9 @@ def reporte_web(
 
     if isinstance(contenido, str):
         return HTMLResponse(content=contenido)
+    nombre = reporte.nombre_archivo_pdf(unidad_nombre, anio, mes)
     return Response(
         content=contenido,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename=planilla_guardia_{anio}_{mes:02d}.pdf"},
+        headers={"Content-Disposition": f'inline; filename="{nombre}"'},
     )
