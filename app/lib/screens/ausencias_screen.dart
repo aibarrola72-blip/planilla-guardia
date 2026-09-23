@@ -25,6 +25,8 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
   String? _error;
   List<AusenciaRango> _ausencias = [];
   List<Persona> _personas = [];
+  List<Unidad> _unidades = [];
+  int? _unidadFiltro; // null = "Todos"
 
   bool get _esLibre => widget.tabla == 'libres';
 
@@ -49,11 +51,14 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
       final resultados = await Future.wait([
         _svc.ausencias(widget.tabla),
         _svc.personas(incluirInactivos: true),
+        _svc.unidades(),
       ]);
       if (!mounted) return;
       setState(() {
         _ausencias = resultados[0] as List<AusenciaRango>;
         _personas = resultados[1] as List<Persona>;
+        _unidades = resultados[2] as List<Unidad>;
+        _ordenar(_ausencias);
         _cargando = false;
       });
     } catch (e) {
@@ -68,6 +73,31 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
   String _nombrePersona(int id) => _personas
       .firstWhere((p) => p.id == id, orElse: () => Persona(id: id, nombre: 'ID $id', ci: '', registro: '', estado: 'ACTIVO', orden: 0))
       .nombre;
+
+  /// Libres: agrupa por persona (nombre A→Z) y dentro cada libre en su
+  /// propia fila ordenado por fecha descendente (año→mes→día).
+  /// Vacaciones: simple orden por fecha ascendente.
+  void _ordenar(List<AusenciaRango> lista) {
+    if (_esLibre) {
+      lista.sort((a, b) {
+        final n = _nombrePersona(a.personaId)
+            .toLowerCase()
+            .compareTo(_nombrePersona(b.personaId).toLowerCase());
+        if (n != 0) return n Disp define return n;
+        return b.inicio.compareTo(a.inicio); // fecha descendente
+      });
+    } else {
+      lista.sort((a, b) => a.inicio.compareTo(b.inicio));
+    }
+  }
+
+  /// Ausencias visibles según la unidad seleccionada (null = "Todos").
+  List<AusenciaRango> get _visibles {
+    if (_unidadFiltro == null) return _ausencias;
+    return _ausencias
+        .where((a) => _personas.any((p) => p.id == a.personaId && p.unidadId == _unidadFiltro))
+        .toList();
+  }
 
   Future<void> _agregar() async {
     int? personaId;
@@ -210,27 +240,50 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : _ausencias.isEmpty
-                  ? const Center(child: Text('Sin registros.'))
-                  : ListView.separated(
-                      itemCount: _ausencias.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, i) {
-                        final a = _ausencias[i];
-                        return ListTile(
-                          title: Text(_nombrePersona(a.personaId)),
-                          subtitle: Text(
-                            a.inicio == a.fin
-                                ? _fmt.format(a.inicio)
-                                : '${_fmt.format(a.inicio)} → ${_fmt.format(a.fin)}',
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _eliminar(a),
-                          ),
-                        );
-                      },
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: DropdownButton<int?>(
+                          value: _unidadFiltro,
+                          hint: const Text('Todos'),
+                          items: [
+                            const DropdownMenuItem<int?>(value: null, child: Text('Todos')),
+                            for (final u in _unidades)
+                              DropdownMenuItem<int?>(value: u.id, child: Text(u.nombre)),
+                          ],
+                          onChanged: (v) => setState(() => _unidadFiltro = v),
+                        ),
+                      ),
                     ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: _visibles.isEmpty
+                          ? const Center(child: Text('Sin registros en esta unidad.'))
+                          : ListView.separated(
+                              itemCount: _visibles.length,
+                              separatorBuilder: (_, _) => const Divider(height: 1),
+                              itemBuilder: (context, i) {
+                                final a = _visibles[i];
+                                return ListTile(
+                                  title: Text(_nombrePersona(a.personaId)),
+                                  subtitle: Text(
+                                    a.inicio == a.fin
+                                        ? _fmt.format(a.inicio)
+                                        : '${_fmt.format(a.inicio)} → ${_fmt.format(a.fin)}',
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () => _eliminar(a),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
     );
   }
 }
