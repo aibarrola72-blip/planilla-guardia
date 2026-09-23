@@ -146,7 +146,12 @@ def construir_filas(
             parte for parte in [persona["nombre"], cargo_nombre, sector_nombre] if parte
         )
 
-        celdas = [{"tipo": "dato", "valor": ""} for _ in range(n)]
+        celdas = []
+        for i, dia in enumerate(dias):
+            c = {"tipo": "dato", "valor": ""}
+            if dia.weekday() >= 5:
+                c["fin_semana"] = True
+            celdas.append(c)
 
         # 1) Vacaciones
         for (ini, fin, obs) in vac_x_persona.get(persona["id"], []):
@@ -169,6 +174,8 @@ def construir_filas(
                     continue  # ya hay vacaciones
                 if celda["tipo"] == "dato":
                     celda["valor"] = "L"
+                    celda["tipo"] = "libre"
+                    celda["tipo"] = "libre"
 
         # 3) Turno del plan
         for idx, dia in enumerate(dias):

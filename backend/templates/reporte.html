@@ -80,6 +80,8 @@
 
     td.nombre-borde     { text-align: left; white-space: nowrap; font-size: 6.7pt; }
     td.celda-turno      { font-size: 6.6pt; }
+    td.celda-libre      { font-size: 6.6pt; background-color: #ffb37a; }
+    td.celda-fin-semana { font-size: 6.6pt; background-color: #b3c9f0; }
     td.celda-vacaciones {
         font-size: 6.5pt;
         font-weight: bold;
@@ -157,6 +159,10 @@
             {% for celda in fila.celdas %}
                 {% if celda.tipo is defined and celda.tipo == 'vacaciones' %}
                 <td class="celda-vacaciones" colspan="{{ celda.colspan }}">{{ celda.texto }}</td>
+                {% elif celda.tipo is defined and celda.tipo == 'libre' %}
+                <td class="celda-libre">{{ celda.valor }}</td>
+                {% elif celda.fin_semana is defined and celda.fin_semana %}
+                <td class="celda-fin-semana">{{ celda.valor }}</td>
                 {% elif celda %}
                 <td class="celda-turno">{{ celda.valor }}</td>
                 {% endif %}
