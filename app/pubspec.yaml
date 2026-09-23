@@ -24,6 +24,7 @@ dependencies:
   intl: ^0.20.1
   path_provider: ^2.1.5
   share_plus: ^10.0.2
+  two_dimensional_scrollables: ^0.5.4
 
 dev_dependencies:
   flutter_test:

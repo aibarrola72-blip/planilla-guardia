@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
@@ -44,6 +45,21 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
     return _mes.year < ahora.year || (_mes.year == ahora.year && _mes.month < ahora.month);
   }
 
+  int get _diasDelMes => DateTime(_mes.year, _mes.month + 1, 0).day;
+
+  String _clave(int personaId, int dia) => '$personaId|${_fecha(dia)}';
+
+  String _fecha(int dia) => DateTime(_mes.year, _mes.month, dia).toIso8601String().split('T').first;
+
+  bool _esLibre(int personaId, int dia) {
+    final d = DateTime(_mes.year, _mes.month, dia);
+    for (final l in _libres) {
+      if (l.personaId != personaId) continue;
+      if (!d.isBefore(l.inicio) && !d.isAfter(l.fin)) return true;
+    }
+    return false;
+  }
+
   Future<void> _cargar() async {
     setState(() {
       _cargando = true;
@@ -87,26 +103,13 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
     }
   }
 
-  int get _diasDelMes => DateTime(_mes.year, _mes.month + 1, 0).day;
-
-  String _clave(int personaId, int dia) => '$personaId|${_fecha(dia)}';
-
-  String _fecha(int dia) => DateTime(_mes.year, _mes.month, dia).toIso8601String().split('T').first;
-
-  bool _esLibre(int personaId, int dia) {
-    final d = DateTime(_mes.year, _mes.month, dia);
-    for (final l in _libres) {
-      if (l.personaId != personaId) continue;
-      if (!d.isBefore(l.inicio) && !d.isAfter(l.fin)) return true;
-    }
-    return false;
-  }
-
   /// Autocompletado base desde el turno base de cada persona.
-  void _autocompletar() {
+  Future<void> _autocompletar() async {
     final nuevas = <String, int>{};
     for (final p in _personas) {
-      final turno = p.turnoId == null ? null : _turnoPorId[p.turnoId!];
+      final turnoId = p.turnoId;
+      if (turnoId == null) continue;
+      final turno = _turnoPorId[turnoId];
       if (turno == null) continue;
 
       for (var dia = 1; dia <= _diasDelMes; dia++) {
@@ -116,11 +119,13 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
         final esFinSemana = diaSemana == 6 || diaSemana == 7;
 
         switch (turno.codigo) {
-          case 'M' || 'T':
+          case 'M': case 'T':
             if (!esFinSemana) nuevas[_clave(p.id, dia)] = turno.id;
+            break;
           case 'D':
             if (esFinSemana) nuevas[_clave(p.id, dia)] = turno.id;
-          case 'N1' || 'N2' || 'N3':
+            break;
+          case 'N1': case 'N2': case 'N3':
             final baseIdx = {'N1': 0, 'N2': 1, 'N3': 2}[turno.codigo]!;
             final desde = p.nocheDesde;
             final lineaInicial = p.nocheInicioLinea;
@@ -128,8 +133,6 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
             if (desde != null &&
                 lineaInicial != null &&
                 {'N1', 'N2', 'N3'}.contains(lineaInicial)) {
-              // Rotación por ancla: línea del día = (línea_inicial + días
-              // desde el inicio) mod 3, con respeto al desfase entre meses.
               final off = {'N1': 0, 'N2': 1, 'N3': 2}[lineaInicial]!;
               final diff = DateTime.utc(_mes.year, _mes.month, dia)
                   .difference(DateTime.utc(desde.year, desde.month, desde.day))
@@ -139,6 +142,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
               indice = turno.codigo.codeUnitAt(1) - 49; // 1->0, 2->1, 3->2
             }
             if (indice == baseIdx) nuevas[_clave(p.id, dia)] = turno.id;
+            break;
         }
       }
     }
@@ -148,16 +152,16 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
   Future<void> _guardar() async {
     setState(() => _cargando = true);
     try {
-      final celdas = <Map<String, dynamic>>[];
+      final celdasGuardar = <Map<String, dynamic>>[];
       _celdas.forEach((clave, turnoId) {
         final partes = clave.split('|');
-        celdas.add({
+        celdasGuardar.add({
           'persona_id': int.parse(partes[0]),
           'fecha': partes[1],
           'turno_id': turnoId,
         });
       });
-      await _svc.reemplazarPlanDeMes(_mes, celdas);
+      await _svc.reemplazarPlanDeMes(_mes, celdasGuardar);
       if (!mounted) return;
       setState(() => _cargando = false);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Plan guardado')));
@@ -182,21 +186,21 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-            const ListTile(title: Text('Asignar turno', style: TextStyle(fontWeight: FontWeight.bold))),
-            ListTile(
-              title: const Text('Sin turno'),
-              leading: const Icon(Icons.block),
-              onTap: () => Navigator.pop(ctx, 0),
-            ),
-            for (final t in _turnos)
+              const ListTile(title: Text('Asignar turno', style: TextStyle(fontWeight: FontWeight.bold))),
               ListTile(
-                title: Text('${t.codigo} · ${t.descripcion} · ${t.horario}'),
-                leading: Icon(
-                  actual == t.id ? Icons.radio_button_checked : Icons.radio_button_off,
-                ),
-                onTap: () => Navigator.pop(ctx, t.id),
+                title: const Text('Sin turno'),
+                leading: const Icon(Icons.block),
+                onTap: () => Navigator.pop(ctx, 0),
               ),
-          ],
+              for (final t in _turnos)
+                ListTile(
+                  title: Text('${t.codigo} · ${t.descripcion} · ${t.horario}'),
+                  leading: Icon(
+                    actual == t.id ? Icons.radio_button_checked : Icons.radio_button_off,
+                  ),
+                  onTap: () => Navigator.pop(ctx, t.id),
+                ),
+            ],
           ),
         ),
       ),
@@ -260,7 +264,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                       ],
                     ),
                     const Padding(
-                      padding: EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      padding: EdgeInsets.all(8),
                       child: Text(
                         'Tocá una celda para asignar el turno. Autocompletar genera '
                         'la base desde el turno de cada persona.',
@@ -269,90 +273,155 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                     ),
                     const Divider(),
                     Expanded(
-                      child: SingleChildScrollView(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                          columnSpacing: 4,
-                          headingRowHeight: 36,
-                          columns: [
-                            const DataColumn(label: Text('Personal')),
-                            for (var dia = 1; dia <= dias; dia++)
-                              DataColumn(
-                                numeric: true,
-                                label: Text(
-                                  '$dia',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: dia % 7 == 0 || dia % 7 == 6 ? FontWeight.bold : FontWeight.normal,
-                                  ),
-                                ),
-                              ),
-                          ],
-                          rows: [
-                            for (final p in _personas)
-                              DataRow(
-                                cells: [
-                                  DataCell(
-                                    Tooltip(
-                                      message: p.etiqueta,
-                                      child: SizedBox(
-                                        width: 150,
-                                        child: Text(
-                                          p.etiqueta,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  for (var dia = 1; dia <= dias; dia++)
-                                  DataCell(
-                                    InkWell(
-                                      onTap: _esMesPasado || _esLibre(p.id, dia)
-                                          ? null
-                                          : () => _seleccionarTurno(p.id, dia),
-                                      child: Container(
-                                        width: 28,
-                                        height: 28,
-                                        alignment: Alignment.center,
-                                        decoration: BoxDecoration(
-                                          color: _esLibre(p.id, dia)
-                                              ? Colors.amber.shade100
-                                              : null,
-                                          border: Border.all(
-                                            color: _esLibre(p.id, dia)
-                                                ? Colors.amber
-                                                : Colors.grey.shade300,
-                                          ),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          _esLibre(p.id, dia)
-                                              ? 'L'
-                                              : (_codigoTurno[
-                                                      _celdas[_clave(p.id, dia)]] ??
-                                                  ''),
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: _esLibre(p.id, dia)
-                                                ? Colors.brown.shade700
-                                                : null,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                        ),
+                      child: _TablaPlan(
+                        dias: dias,
+                        mes: _mes,
+                        personas: _personas,
+                        celdas: _celdas,
+                        codigoTurno: _codigoTurno,
+                        esMesPasado: _esMesPasado,
+                        esLibre: _esLibre,
+                        clave: _clave,
+                        onTapCelda: _seleccionarTurno,
                       ),
                     ),
                   ],
                 ),
+    );
+  }
+}
+
+/// Tabla del plan mensual con la columna "Personal" y la fila de días
+/// fijas (pinned) mientras el resto se desplaza — así siempre sabés qué
+/// día y qué persona estás mirando.
+class _TablaPlan extends StatelessWidget {
+  const _TablaPlan({
+    required this.dias,
+    required this.mes,
+    required this.personas,
+    required this.celdas,
+    required this.codigoTurno,
+    required this.esMesPasado,
+    required this.esLibre,
+    required this.clave,
+    required this.onTapCelda,
+  });
+
+  final int dias;
+  final DateTime mes;
+  final List<Persona> personas;
+  final Map<String, int> celdas;
+  final Map<int, String> codigoTurno;
+  final bool esMesPasado;
+  final bool Function(int, int) esLibre;
+  final String Function(int, int) clave;
+  final void Function(int, int) onTapCelda;
+
+  static const _anchoPersonal = 160.0;
+  static const _anchoDia = 36.0;
+  static const _alto = 40.0;
+  static const _altoCabecera = 36.0;
+
+  bool _esFinDeSemana(int dia) {
+    final w = DateTime(mes.year, mes.month, dia).weekday;
+    return w == 6 || w == 7;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TableView.builder(
+      columnCount: dias + 1, // +1 = columna Personal
+      rowCount: personas.length + 1, // +1 = fila de días
+      pinnedRowCount: 1,
+      pinnedColumnCount: 1,
+      columnBuilder: (index) => TableSpan(
+        extent: FixedTableSpanExtent(index == 0 ? _anchoPersonal : _anchoDia),
+      ),
+      rowBuilder: (index) => TableSpan(
+        extent: FixedTableSpanExtent(index == 0 ? _altoCabecera : _alto),
+      ),
+      cellBuilder: (context, position) {
+        final esCabecera = position.row == 0;
+        final esPersonal = position.column == 0;
+
+        if (esCabecera && esPersonal) {
+          return const TableViewCell(
+            child: Center(
+              child: Text(
+                'Personal',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          );
+        }
+        if (esCabecera) {
+          final dia = position.column;
+          return TableViewCell(
+            child: Center(
+              child: Text(
+                '$dia',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: _esFinDeSemana(dia) ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+          );
+        }
+
+        final persona = personas[position.row - 1];
+
+        if (esPersonal) {
+          return TableViewCell(
+            child: Tooltip(
+              message: persona.nombre,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    persona.nombre,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final dia = position.column;
+        final esLibreDia = esLibre(persona.id, dia);
+        final turnoId = celdas[clave(persona.id, dia)];
+        final codigo = turnoId != null ? codigoTurno[turnoId] : null;
+        final editable = !esMesPasado && !esLibreDia;
+
+        return TableViewCell(
+          child: InkWell(
+            onTap: editable ? () => onTapCelda(persona.id, dia) : null,
+            child: Container(
+              height: _alto,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: esLibreDia ? Colors.amber.shade100 : null,
+                border: Border.all(
+                  color: esLibreDia ? Colors.amber : Colors.grey.shade300,
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                esLibreDia
+                    ? 'L'
+                    : (codigo ?? ''),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: esLibreDia ? Colors.brown.shade700 : null,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
