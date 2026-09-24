@@ -75,30 +75,41 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
   bool _mismoGrupo(Persona a, Persona b) =>
       _grupo(a) == _grupo(b) && (a.unidadId ?? 0) == (b.unidadId ?? 0);
 
-  Future<void> _subir(int index) async {
-    if (index <= 0) return;
-    await _moverYRenumerar(index, index - 1);
-  }
+  /// Reordena por arrastre, respetando el agrupamiento por turno+unidad.
+  void _arrastrar(int oldIndex, int newIndex) {
+    if (newIndex == oldIndex) return;
 
-  Future<void> _bajar(int index) async {
-    if (index >= _personas.length - 1) return;
-    await _moverYRenumerar(index, index + 1);
-  }
-
-  Future<void> _moverYRenumerar(int origen, int destino) async {
-    if (!_mismoGrupo(_personas[origen], _personas[destino])) return;
     final lista = List.of(_personas);
-    final item = lista.removeAt(origen);
-    lista.insert(destino, item);
+    final item = lista.removeAt(oldIndex);
+    final anterior = newIndex - 1 >= 0 ? lista[newIndex - 1] : null;
+    final siguiente = newIndex < lista.length ? lista[newIndex] : null;
+    final mismoGrupo = (anterior == null || _mismoGrupo(item, anterior)) &&
+        (siguiente == null || _mismoGrupo(item, siguiente));
+
+    if (!mismoGrupo) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Solo se puede reordenar dentro del mismo grupo de turno')),
+        );
+      return;
+    }
+
+    lista.insert(newIndex, item);
+    setState(() => _personas = lista);
+    _persistirOrden(lista);
+  }
+
+  Future<void> _persistirOrden(List<Persona> lista) async {
     try {
       await _svc.renumerarOrden(lista);
+      await _cargarTodo();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo reordenar')));
       }
-      return;
+      await _cargarTodo();
     }
-    await _cargarTodo();
   }
 
   @override
@@ -185,60 +196,74 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
               ? Center(child: Text(_error!))
               : _personas.isEmpty
                   ? const Center(child: Text('Sin personal cargado.'))
-                  : ListView.separated(
-                      itemCount: _personas.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, i) {
-                        final p = _personas[i];
-                        final cargo = _cargoNombre[p.cargoId] ?? '';
-                        return ListTile(
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => PersonalEditScreen(
-                                  persona: p,
-                                  unidades: _unidades,
-                                  sectores: _sectores,
-                                  cargos: _cargos,
-                                  turnos: _turnos,
-                                  soloLectura: !editar,
-                                ),
-                              ),
-                            );
-                            if (editar) _cargarTodo();
-                          },
-                          leading: Text(
-                            '${p.orden}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          title: Text(p.nombre),
-                          subtitle: Text(
-                            'CI ${p.ci} · Reg ${p.registro}${cargo.isEmpty ? '' : ' · $cargo'}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (!p.estaActivo)
-                                const Chip(
-                                  label: Text('INACTIVO'),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              if (editar) ...[
-                                IconButton(
-                                  icon: const Icon(Icons.arrow_upward),
-                                  onPressed: () => _subir(i),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.arrow_downward),
-                                  onPressed: () => _bajar(i),
-                                ),
+                  : editar
+                      ? ReorderableListView.builder(
+                          itemCount: _personas.length,
+                          onReorderItem: _arrastrar,
+                          buildDefaultDragHandles: false,
+                          itemBuilder: (context, i) {
+                            return Column(
+                              key: ValueKey(_personas[i].id),
+                              children: [
+                                _fila(i, _personas[i], editar),
+                                const Divider(height: 1),
                               ],
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            );
+                          },
+                        )
+                      : ListView.separated(
+                          itemCount: _personas.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, i) => _fila(i, _personas[i], editar),
+                        ),
+    );
+  }
+
+  Widget _fila(int index, Persona p, bool editar) {
+    final cargo = _cargoNombre[p.cargoId] ?? '';
+    return ListTile(
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PersonalEditScreen(
+              persona: p,
+              unidades: _unidades,
+              sectores: _sectores,
+              cargos: _cargos,
+              turnos: _turnos,
+              soloLectura: !editar,
+            ),
+          ),
+        );
+        if (editar) _cargarTodo();
+      },
+      leading: Text(
+        '${p.orden}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      title: Text(p.nombre),
+      subtitle: Text(
+        'CI ${p.ci} · Reg ${p.registro}${cargo.isEmpty ? '' : ' · $cargo'}',
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!p.estaActivo)
+            const Chip(
+              label: Text('INACTIVO'),
+              visualDensity: VisualDensity.compact,
+            ),
+          if (editar)
+            ReorderableDragStartListener(
+              index: index,
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.drag_handle),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

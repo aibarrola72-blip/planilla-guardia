@@ -175,7 +175,6 @@ def construir_filas(
                 if celda["tipo"] == "dato":
                     celda["valor"] = "L"
                     celda["tipo"] = "libre"
-                    celda["tipo"] = "libre"
 
         # 3) Turno del plan
         for idx, dia in enumerate(dias):

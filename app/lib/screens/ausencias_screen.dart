@@ -33,8 +33,6 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
   List<Persona> _personas = [];
 
   /// Filtro por unidad (solo pantalla, igual que Personal).
-  List<Unidad> _unidades = [];
-  int? _unidadFiltro; // null = "Todos"
   int? _filtroUnidad; // null = "Todos" (unidad a la que pertenece la persona)
   List<Unidad> _listaUnidades = []; // unidades cargadas
 

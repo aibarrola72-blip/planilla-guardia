@@ -19,9 +19,6 @@ class AppState extends ChangeNotifier {
   bool _tieneSesion = false;
   bool get tieneSesion => _tieneSesion;
 
-  final bool _listo = false;
-  bool get listo => _listo;
-
   String? _error;
   String? get error => _error;
 
