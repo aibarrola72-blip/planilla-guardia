@@ -43,11 +43,13 @@ class UsuarioRequest(BaseModel):
     email: str = Field(min_length=3)
     rol: str | None = None
     unidad_id: int | None = None
+    unidades: list[int] | None = None
 
 
 class UsuarioPatch(BaseModel):
     rol: str | None = None
     unidad_id: int | None = None
+    unidades: list[int] | None = None
     activo: bool | None = None
 
 
@@ -123,13 +125,14 @@ def _buscar_usuario_por_email(email: str) -> dict | None:
 
 
 def _crear_o_actualizar_usuario(
-    email: str, rol: str | None, unidad_id: int | None, perfil: dict
+    email: str, rol: str | None, unidad_id: int | None, perfil: dict,
+    unidades: list[int] | None = None,
 ) -> dict:
     """Invita (o reenvía enlace a) un usuario y ajusta rol/unidad/activo.
 
     Aplica las reglas de alcance por el rol del solicitante:
     - jefe: solo puede crear RT de su propia unidad.
-    - admin / jefe_enfermeria: cualquier rol/unidad.
+    - admin / jefe_enfermeria: cualquier rol/unidad (una o varias).
     """
     rol_nuevo = rol or "rt"
 
@@ -140,13 +143,17 @@ def _crear_o_actualizar_usuario(
             raise HTTPException(status_code=403, detail="Su perfil no tiene unidad asignada")
         if unidad_id not in (unidad_destino, None):
             raise HTTPException(status_code=403, detail="Solo puede invitar RT de su unidad")
+        unidades = None
     else:
         # admin / jefe_enfermeria
         if rol_nuevo not in config.ROLES_VALIDOS:
             raise HTTPException(status_code=400, detail="Rol inválido")
-        if rol_nuevo == "rt" and unidad_id is None:
+        if rol_nuevo == "rt" and not unidades and unidad_id is None:
             raise HTTPException(status_code=400, detail="Un RT necesita unidad asignada")
-        unidad_destino = unidad_id
+        if unidades:
+            unidad_destino = unidades[0]
+        else:
+            unidad_destino = unidad_id
 
     existente = _buscar_usuario_por_email(email)
     if existente is None:
@@ -162,15 +169,17 @@ def _crear_o_actualizar_usuario(
         filas = database.obtener_perfil(user_id)
         if filas:
             database.actualizar_perfil(user_id, {"rol": rol_nuevo, "activo": True, "unidad_id": unidad_destino})
+            if unidades is not None:
+                database.reemplazar_unidades(user_id, unidades)
 
-    return {"email": email, "rol": rol_nuevo, "unidad_id": unidad_destino}
+    return {"email": email, "rol": rol_nuevo, "unidad_id": unidad_destino, "unidades": unidades}
 
 
 @app.post("/api/invitar")
 def invitar(body: UsuarioRequest, request: Request):
     """Invita a un nuevo usuario con rol/unidad (app móvil: jefe → RT)."""
     info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
-    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"])
+    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"], body.unidades)
     return {"ok": True, **resultado}
 
 
@@ -196,16 +205,18 @@ def listar_usuarios(request: Request):
 
     emails = {u["id"]: u.get("email") for u in resp.json().get("users", [])}
     filas = []
+    mis_unidades = set(info["perfil"].get("unidades") or [])
     for p in perfiles:
         uid = p["user_id"]
         if info["perfil"]["rol"] == "jefe":
-            if p.get("rol") != "rt" or p.get("unidad_id") != info["perfil"].get("unidad_id"):
+            if p.get("rol") != "rt" or p.get("unidad_id") not in mis_unidades:
                 continue
         filas.append({
             "user_id": uid,
             "email": emails.get(uid, ""),
             "rol": p.get("rol"),
             "unidad_id": p.get("unidad_id"),
+            "unidades": p.get("unidades") or [],
             "activo": p.get("activo"),
         })
     return {"usuarios": filas}
@@ -215,7 +226,7 @@ def listar_usuarios(request: Request):
 def crear_usuario(body: UsuarioRequest, request: Request):
     """Crea + invita un usuario (web admin / jefe → RT)."""
     info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
-    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"])
+    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"], body.unidades)
     return {"ok": True, **resultado}
 
 
@@ -228,19 +239,29 @@ def actualizar_usuario(user_id: str, body: UsuarioPatch, request: Request):
         raise HTTPException(status_code=404, detail="Usuario sin perfil")
 
     destino = filas[0]
+    mis_unidades = set(info["perfil"].get("unidades") or [])
     if info["perfil"]["rol"] == "jefe":
-        if destino.get("rol") != "rt" or destino.get("unidad_id") != info["perfil"].get("unidad_id"):
+        if destino.get("rol") != "rt" or destino.get("unidad_id") not in mis_unidades:
             raise HTTPException(status_code=403, detail="Solo puede modificar RT de su unidad")
         if body.rol not in (None, "rt"):
             raise HTTPException(status_code=403, detail="Un jefe solo puede gestionar RT")
-        if body.unidad_id not in (None, info["perfil"].get("unidad_id")):
+        if body.unidad_id not in (None, *mis_unidades):
             raise HTTPException(status_code=403, detail="Solo puede operar sobre su unidad")
+        if body.unidades is not None:
+            raise HTTPException(status_code=403, detail="Un jefe no puede asignar unidades")
+
+    if body.unidades is not None:
+        database.reemplazar_unidades(user_id, body.unidades)
+        body.unidad_id = body.unidades[0] if body.unidades else None
 
     campos: dict = {
-        k: v for k, v in body.model_dump(exclude_none=True).items()
+        k: v for k, v in body.model_dump(exclude_unset=True).items() if k != "unidades"
     }
     if not campos:
-        raise HTTPException(status_code=400, detail="Sin cambios")
+        return {"ok": True}
+    if "unidad_id" in campos and body.unidades is None:
+        uid = campos["unidad_id"]
+        database.reemplazar_unidades(user_id, [uid] if uid else [])
     database.actualizar_perfil(user_id, campos)
     return {"ok": True}
 

@@ -126,14 +126,32 @@ def guardar_plan_mensual(filas: list[dict]) -> list[dict] | None:
 
 # ---------- perfiles (roles) ----------
 
+def _unidades_por_usuario() -> dict:
+    """Mapa user_id -> lista de unidades asignadas (perfil_unidades)."""
+    out: dict = {}
+    for fila in _get("perfil_unidades", {"select": "user_id,unidad_id"}):
+        out.setdefault(fila["user_id"], []).append(fila["unidad_id"])
+    return out
+
+
+def _adjuntar_unidades(perfiles: list[dict]) -> list[dict]:
+    """Agrega 'unidades' (lista) a cada perfil; si no hay filas en
+    perfil_unidades, usa perfiles.unidad_id (RT / invitación simple)."""
+    por_usuario = _unidades_por_usuario()
+    for p in perfiles:
+        extra = por_usuario.get(p["user_id"], [])
+        p["unidades"] = extra if extra else ([p["unidad_id"]] if p.get("unidad_id") else [])
+    return perfiles
+
+
 def obtener_perfil(user_id: str) -> list[dict]:
     """Perfil del usuario. Usado por el backend (service-role) para RLS/autorización."""
-    return _get("perfiles", {"select": "rol,unidad_id,activo", "user_id": f"eq.{user_id}"})
+    return _adjuntar_unidades(_get("perfiles", {"select": "user_id,rol,unidad_id,activo", "user_id": f"eq.{user_id}"}))
 
 
 def listar_perfiles() -> list[dict]:
     """Todos los perfiles (para el panel admin)."""
-    return _get("perfiles", {"select": "user_id,rol,unidad_id,activo,updated_at", "order": "updated_at.desc"})
+    return _adjuntar_unidades(_get("perfiles", {"select": "user_id,rol,unidad_id,activo,updated_at", "order": "updated_at.desc"}))
 
 
 def actualizar_perfil(user_id: str, campos: dict) -> None:
@@ -142,6 +160,19 @@ def actualizar_perfil(user_id: str, campos: dict) -> None:
     headers = _headers()
     resp = requests.patch(url, headers=headers, json=campos, params={"user_id": f"eq.{user_id}"}, timeout=30)
     resp.raise_for_status()
+
+
+def reemplazar_unidades(user_id: str, unidades: list[int]) -> None:
+    """Reemplaza las unidades a cargo de un usuario y sincroniza la primaria."""
+    url = f"{config.SUPABASE_URL}/rest/v1/perfil_unidades"
+    headers = _headers()
+    resp = requests.delete(url, headers=headers, params={"user_id": f"eq.{user_id}"}, timeout=30)
+    resp.raise_for_status()
+    if unidades:
+        filas = [{"user_id": user_id, "unidad_id": uid} for uid in dict.fromkeys(unidades)]
+        resp = requests.post(url, headers=headers, json=filas, timeout=30)
+        resp.raise_for_status()
+    actualizar_perfil(user_id, {"unidad_id": unidades[0] if unidades else None})
 
 
 # ---------- firmas de la planilla ----------
