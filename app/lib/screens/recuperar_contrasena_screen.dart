@@ -37,8 +37,9 @@ class _RecuperarContrasenaScreenState extends State<RecuperarContrasenaScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Contraseña actualizada. Ya podés ingresar.')),
       );
-      Navigator.of(context).popUntil((r) => r.isFirst);
-      context.read<AppState>().cerrarSesion();
+      // 💡 Desactivamos el modo recuperación para que PantallaRaiz evalúe de nuevo
+      context.read<AppState>().cerrarSesion(); // Limpia la sesión temporal y manda al Login
+      Navigator.of(context).popUntil((r) => r.isFirst); // Asegura volver a la raíz
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.read<AppState>().error ?? 'No se pudo actualizar la contraseña')),

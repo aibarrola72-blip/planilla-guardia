@@ -7,6 +7,10 @@ import '../services/supabase_service.dart';
 class AppState extends ChangeNotifier {
   AppState() {
     Supabase.instance.client.auth.onAuthStateChange.listen((estado) {
+
+      if (estado.event == AuthChangeEvent.passwordRecovery) {
+        _recuperandoContrasena = true;
+      }
       _tieneSesion = estado.session != null;
       notifyListeners();
     });
@@ -23,6 +27,19 @@ class AppState extends ChangeNotifier {
 
   /// Usuario autenticado actual (o null si no hay sesión).
   User? get usuario => SupabaseService.instance.usuario;
+
+  bool _recuperandoContrasena = false;
+  bool get recuperandoContrasena => _recuperandoContrasena;
+
+  void activarModoRecuperacion() {
+    _recuperandoContrasena = true;
+    notifyListeners();
+  }
+
+  void desactivarModoRecuperacion() {
+    _recuperandoContrasena = false;
+    notifyListeners();
+  }
 
   /// Fuerza una actualización del flag de sesión al iniciar.
   void sincronizar() {
@@ -79,6 +96,7 @@ class AppState extends ChangeNotifier {
     _error = null;
     try {
       await SupabaseService.instance.restablecerContrasena(nueva);
+      _recuperandoContrasena = false;
       notifyListeners();
       return true;
     } on AuthException catch (e) {
@@ -104,6 +122,7 @@ class AppState extends ChangeNotifier {
   void cerrarSesion() {
     SupabaseService.instance.cerrarSesion();
     _tieneSesion = false;
+    _recuperandoContrasena = false;
     notifyListeners();
   }
 }

@@ -18,19 +18,24 @@ Future<void> main() async {
     publishableKey: AppConfig.supabaseAnonKey,
   );
 
+  // 💡 Creamos el estado primero para poder enviarle el evento directamente
+  final appState = AppState();
+
   // supabase_flutter ya observa deep links (iniciales y en vivo) por su cuenta:
   // cuando llega un enlace de recuperación emite AuthChangeEvent.passwordRecovery.
   Supabase.instance.client.auth.onAuthStateChange.listen((cambio) {
     if (cambio.event == AuthChangeEvent.passwordRecovery) {
-      navigatorKey.currentState?.push(
-        MaterialPageRoute<void>(
-          builder: (_) => const RecuperarContrasenaScreen(),
-        ),
-      );
+      // 💡 En lugar de hacer un push a ciegas, le avisamos al estado global
+      appState.activarModoRecuperacion();      
+      
     }
   });
 
-  runApp(const IneramApp());
+  runApp(ChangeNotifierProvider.value(
+      value: appState..sincronizar(),
+      child: const IneramApp(),
+    ),
+  );
 }
 
 class IneramApp extends StatelessWidget {
@@ -60,6 +65,11 @@ class PantallaRaiz extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final estado = context.watch<AppState>();
-    return estado.tieneSesion ? const HomeScreen() : const LoginScreen();
+    // 💡 Prioridad 1: Si Supabase avisó que estamos recuperando contraseña,
+    // mostramos de manera directa la pantalla correcta sin importar la sesión.
+    if (estado.recuperandoContrasena) {
+      return const RecuperarContrasenaScreen();
+    }
+    return estado.tieneSesion ? const HomeScreen() : const LoginScreen(); 
   }
 }
