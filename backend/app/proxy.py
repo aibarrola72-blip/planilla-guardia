@@ -35,6 +35,11 @@ async def reenviar(servicio: str, path: str, request: Request) -> Response:
         if k.lower() not in {"host", "content-length", "connection"}
     }
 
+    # El panel web manda 'apikey: public' como marcador (GoTrue exige una
+    # clave válida); si viene vacía o con ese marcador, usamos la anon key.
+    if not headers.get("apikey") or headers.get("apikey").strip() == "public":
+        headers["apikey"] = config.SUPABASE_ANON_KEY
+
     # Nunca reenviar la service-role key (quedó configurada por accidente en un
     # cliente). Las claves anon y los JWT de sesión sí se reenvían tal cual.
     for valor in headers.values():
