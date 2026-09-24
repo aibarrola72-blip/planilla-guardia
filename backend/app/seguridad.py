@@ -87,6 +87,8 @@ def generar_invitacion(email: str) -> None:
 
     Para un email inexistente, GoTrue crea el usuario pendiente y la
     invitación; el trigger handle_new_user le crea el perfil rol='rt'.
+    El invitado define su contraseña con el flujo existente de recuperación
+    ("olvidé mi contraseña") una vez dentro de la app.
     """
     try:
         resp = requests.post(

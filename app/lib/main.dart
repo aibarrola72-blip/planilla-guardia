@@ -18,24 +18,14 @@ Future<void> main() async {
     publishableKey: AppConfig.supabaseAnonKey,
   );
 
-  // 💡 Creamos el estado primero para poder enviarle el evento directamente
-  final appState = AppState();
-
-  // supabase_flutter ya observa deep links (iniciales y en vivo) por su cuenta:
-  // cuando llega un enlace de recuperación emite AuthChangeEvent.passwordRecovery.
-  Supabase.instance.client.auth.onAuthStateChange.listen((cambio) {
-    if (cambio.event == AuthChangeEvent.passwordRecovery) {
-      // 💡 En lugar de hacer un push a ciegas, le avisamos al estado global
-      appState.activarModoRecuperacion();      
-      
-    }
-  });
+  // 💡 Única instancia del estado global; escucha por su cuenta los eventos
+  // de Supabase (entre ellos passwordRecovery para el deep link).
+  final appState = AppState()..sincronizar();
 
   runApp(ChangeNotifierProvider.value(
-      value: appState..sincronizar(),
-      child: const IneramApp(),
-    ),
-  );
+    value: appState,
+    child: const IneramApp(),
+  ));
 }
 
 class IneramApp extends StatelessWidget {
@@ -43,18 +33,15 @@ class IneramApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppState()..sincronizar(),
-      child: MaterialApp(
-        title: 'Planilla INERAM',
-        debugShowCheckedModeBanner: false,
-        navigatorKey: navigatorKey,
-        theme: ThemeData(
-          colorSchemeSeed: const Color(0xFF00695C),
-          useMaterial3: true,
-        ),
-        home: const PantallaRaiz(),
+    return MaterialApp(
+      title: 'Planilla INERAM',
+      debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
+      theme: ThemeData(
+        colorSchemeSeed: const Color(0xFF00695C),
+        useMaterial3: true,
       ),
+      home: const PantallaRaiz(),
     );
   }
 }
@@ -65,11 +52,11 @@ class PantallaRaiz extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final estado = context.watch<AppState>();
-    // 💡 Prioridad 1: Si Supabase avisó que estamos recuperando contraseña,
-    // mostramos de manera directa la pantalla correcta sin importar la sesión.
+    // 💡 Prioridad 1: si Supabase avisó que estamos recuperando contraseña,
+    // mostramos la pantalla correcta sin importar la sesión.
     if (estado.recuperandoContrasena) {
       return const RecuperarContrasenaScreen();
     }
-    return estado.tieneSesion ? const HomeScreen() : const LoginScreen(); 
+    return estado.tieneSesion ? const HomeScreen() : const LoginScreen();
   }
 }
