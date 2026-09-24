@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>INERAM · Administración</title>
+<style>
+  :root { --teal:#00695c; --teal2:#0b7f6f; --bg:#f3f6f5; --line:#dbe3e1; --txt:#20302c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Segoe UI, system-ui, sans-serif; background:var(--bg); color:var(--txt); }
+  .barra { background:var(--teal); color:#fff; padding:14px 20px; font-weight:600; font-size:18px;
+           display:flex; justify-content:space-between; align-items:center; }
+  .barra button { background:#fff; color:var(--teal); border:none; padding:6px 14px; border-radius:6px; cursor:pointer; }
+  .wrap { max-width:960px; margin:20px auto; padding:0 16px; }
+  .caja { background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px; margin-bottom:16px; }
+  h2 { margin:0 0 12px; font-size:16px; color:var(--teal); }
+  .tabs button { background:none; border:none; font-size:15px; padding:8px 14px; cursor:pointer; border-bottom:3px solid transparent; color:#476; }
+  .tabs button.activo { color:var(--teal); border-bottom-color:var(--teal); font-weight:600; }
+  .oculto { display:none; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th { color:#5a6; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  input, select { padding:7px 9px; border:1px solid var(--line); border-radius:6px; font-size:14px; }
+  .fila { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px; }
+  .fila label { font-size:12px; color:#5a6; display:flex; flex-direction:column; gap:3px; }
+  .btn { background:var(--teal2); color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:14px; }
+  .btn.seco { background:#fff; color:var(--teal2); border:1px solid var(--teal2); }
+  .btn.danger { background:#c0392b; }
+  .chip { padding:2px 8px; border-radius:10px; font-size:12px; }
+  .chip.on { background:#e2f3e4; color:#1e7b33; }
+  .chip.off { background:#fbe9e7; color:#b34b2f; }
+  .aviso { background:#fdf3d7; border:1px solid #f3deb0; color:#6b5a12; padding:10px 14px; border-radius:6px; margin-bottom:12px; }
+  .screen-login { max-width:380px; margin:80px auto; }
+  .error { color:#c0392b; font-size:13px; margin-top:8px; }
+  .estado { font-size:13px; color:#476; margin-top:8px; }
+</style>
+</head>
+<body>
+  <div class="barra"><span>INERAM · Panel de Administración</span>
+    <button id="btnSalir" class="oculto">Salir</button>
+  </div>
+
+  <!-- Login -->
+  <div id="vistaLogin" class="screen-login caja">
+    <h2>Acceso de administración</h2>
+    <div class="fila">
+      <label>Email<input id="loginEmail" type="email" autocomplete="username"></label>
+    </div>
+    <div class="fila">
+      <label>Contraseña<input id="loginPass" type="password" autocomplete="current-password"></label>
+    </div>
+    <button class="btn" onclick="login()">Ingresar</button>
+    <div id="loginError" class="error"></div>
+  </div>
+
+  <!-- App -->
+  <div id="vistaApp" class="oculto">
+    <div class="wrap">
+      <div id="estadoUsuario" class="estado"></div>
+      <div class="caja tabs">
+        <button id="tabUsuarios" class="activo" onclick="mostrarTab('usuarios')">Usuarios</button>
+        <button id="tabCatalogos" onclick="mostrarTab('catalogos')">Catálogos</button>
+      </div>
+
+      <!-- Usuarios -->
+      <div id="ctnUsuarios" class="caja">
+        <h2>Usuarios del sistema</h2>
+        <div class="fila">
+          <label>Email<input id="uEmail" type="email" placeholder="nuevo@ineram.com"></label>
+          <label>Rol<select id="uRol">
+            <option value="rt">RT</option><option value="jefe">Jefe de unidad</option>
+            <option value="jefe_enfermeria">Jefe de enfermería</option><option value="admin">Admin</option>
+          </select></label>
+          <label>Unidad<select id="uUnidad"></select></label>
+          <button class="btn" onclick="crearUsuario()">+ Invitar usuario</button>
+        </div>
+        <table>
+          <thead><tr><th>Email</th><th>Rol</th><th>Unidad</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tablaUsuarios"></tbody>
+        </table>
+        <div class="estado" id="estadoUsuarios"></div>
+      </div>
+
+      <!-- Catálogos -->
+      <div id="ctnCatalogos" class="caja oculto">
+        <div class="fila">
+          <button class="btn seco" onclick="verCatalogo('unidades')">Unidades</button>
+          <button class="btn seco" onclick="verCatalogo('sectores')">Sectores</button>
+          <button class="btn seco" onclick="verCatalogo('cargos')">Cargos</button>
+          <button class="btn seco" onclick="verCatalogo('turnos')">Turnos</button>
+        </div>
+        <div class="fila" id="filaCrearCatalogo">
+          <label id="cCatLabel">Nombre<input id="cNombre" placeholder="Nombre"></label>
+          <label id="cUnidadLabel" class="oculto">Unidad<select id="cUnidad"></select></label>
+          <div id="cTurnosExtra" class="oculto">
+            <label>Código<input id="cCodigo" placeholder="M"></label>
+            <label>Descripción<input id="cDesc" placeholder="Mañana"></label>
+            <label>Inicio<input id="cIni" type="time"></label>
+            <label>Fin<input id="cFin" type="time"></label>
+          </div>
+          <button class="btn" onclick="crearCatalogo()">+ Crear</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Detalle</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tablaCatalogo"></tbody>
+        </table>
+        <div class="estado" id="estadoCatalogos"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const LS_KEY = 'ineram_admin_token';
+let TOKEN = localStorage.getItem(LS_KEY) || '';
+let CFG = null;            // {supabaseUrl, anonKey, roles}
+let UNIDADES = [];         // carga de unidades para selects
+let catalogoActual = 'unidades';
+let unidadesLoaded = false;
+
+function api(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+  if (CFG) headers['apikey'] = CFG.anonKey;
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  return fetch(path, { ...opts, headers });
+}
+
+async function iniciar() {
+  document.getElementById('btnSalir').classList.toggle('oculto', !TOKEN);
+  if (TOKEN) document.getElementById('vistaApp').classList.remove('oculto');
+  else document.getElementById('vistaLogin').classList.remove('oculto');
+  if (TOKEN) await cargarApp();
+}
+
+async function cargarApp() {
+  try {
+    const r = await api('/api/config');
+    CFG = await r.json();
+    await cargarUnidades();
+    await Promise.all([cargarUsuarios(), verCatalogo(catalogoActual)]);
+  } catch (e) { salir(); }
+}
+
+async function login() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+  try {
+    const r = await fetch('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': 'public' },
+      body: JSON.stringify({ email, password: pass })
+    });
+    if (!r.ok) throw new Error('Credenciales inválidas');
+    const j = await r.json();
+    TOKEN = j.access_token;
+    localStorage.setItem(LS_KEY, TOKEN);
+    document.getElementById('vistaLogin').classList.add('oculto');
+    document.getElementById('vistaApp').classList.remove('oculto');
+    document.getElementById('btnSalir').classList.remove('oculto');
+    await cargarApp();
+  } catch (e) { err.textContent = e.message || 'No se pudo iniciar sesión'; }
+}
+
+function salir() {
+  TOKEN = ''; localStorage.removeItem(LS_KEY);
+  document.getElementById('vistaApp').classList.add('oculto');
+  document.getElementById('vistaLogin').classList.remove('oculto');
+  document.getElementById('btnSalir').classList.add('oculto');
+}
+
+function mostrarTab(tab) {
+  document.getElementById('tabUsuarios').classList.toggle('activo', tab === 'usuarios');
+  document.getElementById('tabCatalogos').classList.toggle('activo', tab === 'catalogos');
+  document.getElementById('ctnUsuarios').classList.toggle('oculto', tab !== 'usuarios');
+  document.getElementById('ctnCatalogos').classList.toggle('oculto', tab !== 'catalogos');
+  if (tab === 'catalogos') verCatalogo(catalogoActual);
+}
+
+// ---------- Unidades (para selects) ----------
+async function cargarUnidades() {
+  const r = await api('/rest/v1/unidades?select=id,nombre&order=nombre', { headers: { 'Prefer': 'count=exact' } });
+  const filas = await r.json();
+  const lista = Array.isArray(filas) ? filas : [];
+  UNIDADES = lista;
+  for (const id of ['uUnidad', 'cUnidad']) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '';
+    for (const u of lista) {
+      const o = document.createElement('option');
+      o.value = u.id; o.textContent = u.nombre;
+      sel.appendChild(o);
+    }
+  }
+  const estadoUsuario = document.getElementById('estadoUsuario');
+  try {
+    const ru = await api('/api/usuarios');
+    const ju = await ru.json();
+    const yo = (ju.usuarios || []);
+    estadoUsuario.textContent = `Sesión iniciada. Usuarios visibles: ${yo.length}`;
+  } catch (_) {}
+  unidadesLoaded = true;
+}
+
+// ---------- Usuarios ----------
+async function cargarUsuarios() {
+  const est = document.getElementById('estadoUsuarios');
+  est.textContent = 'Cargando…';
+  try {
+    const r = await api('/api/usuarios');
+    const j = await r.json();
+    const tbody = document.getElementById('tablaUsuarios');
+    tbody.innerHTML = '';
+    const uniNombre = (id) => { const u = UNIDADES.find(x => x.id == id); return u ? u.nombre : (id || '—'); };
+    for (const u of j.usuarios || []) {
+      const tr = document.createElement('tr');
+      const activo = !!u.activo;
+      tr.innerHTML = `
+        <td>${esc(u.email)}</td>
+        <td><select onchange="cambiarRol('${u.user_id}', this.value)">
+          ${rolesSelect(u.rol)}</select></td>
+        <td>${uniNombre(u.unidad_id)}</td>
+        <td><span class="chip ${activo ? 'on' : 'off'}">${activo ? 'activo' : 'inactivo'}</span></td>
+        <td>
+          <button class="btn seco" onclick="toggleActivo('${u.user_id}', ${!activo})">${activo ? 'Desactivar' : 'Activar'}</button>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+    est.textContent = '';
+  } catch (e) { est.textContent = 'Error cargando usuarios'; }
+}
+
+function rolesSelect(actual) {
+  const roles = ['rt', 'jefe', 'jefe_enfermeria', 'admin'];
+  return roles.map(r =>
+    `<option value="${r}" ${r === actual ? 'selected' : ''}>${r}</option>`).join('');
+}
+
+function uniActual() {
+  return document.getElementById('uUnidad').value || null;
+}
+
+async function crearUsuario() {
+  const email = document.getElementById('uEmail').value.trim();
+  const rol = document.getElementById('uRol').value;
+  if (!email) return;
+  const est = document.getElementById('estadoUsuarios');
+  est.textContent = 'Enviando invitación…';
+  try {
+    const r = await api('/api/usuarios', {
+      method: 'POST',
+      body: JSON.stringify({ email, rol, unidad_id: uniActual() })
+    });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || 'Error'); }
+    document.getElementById('uEmail').value = '';
+    est.textContent = `Invitación enviada a ${email}`;
+    await cargarUsuarios();
+  } catch (e) { est.textContent = 'Error: ' + (e.message || e); }
+}
+
+async function cambiarRol(userId, rol) {
+  await api('/api/usuarios/' + userId, { method: 'PATCH', body: JSON.stringify({ rol }) });
+  cargarUsuarios();
+}
+
+async function toggleActivo(userId, activo) {
+  await api('/api/usuarios/' + userId, { method: 'PATCH', body: JSON.stringify({ activo }) });
+  cargarUsuarios();
+}
+
+// ---------- Catálogos ----------
+function verCatalogo(tabla) {
+  catalogoActual = tabla;
+  document.getElementById('cCatLabel').style.display = tabla === 'sectores' ? 'none' : 'flex';
+  document.getElementById('cUnidadLabel').classList.toggle('oculto', tabla !== 'sectores');
+  document.getElementById('cTurnosExtra').classList.toggle('oculto', tabla !== 'turnos');
+  cargarCatalogo(tabla);
+}
+
+async function cargarCatalogo(tabla) {
+  const est = document.getElementById('estadoCatalogos');
+  est.textContent = 'Cargando…';
+  const emb = { unidades: 'id,nombre,activo', sectores: 'id,unidad_id,nombre,activo',
+                cargos: 'id,nombre,activo', turnos: 'id,codigo,descripcion,hora_inicio,hora_fin,activo' }[tabla];
+  try {
+    const r = await api(`/rest/v1/${tabla}?select=${emb}&order=id`);
+    const filas = await r.json();
+    const tbody = document.getElementById('tablaCatalogo');
+    tbody.innerHTML = '';
+    const uniNombre = (id) => { const u = UNIDADES.find(x => x.id == id); return u ? u.nombre : '—'; };
+    const esTurno = tabla === 'turnos';
+    for (const f of filas) {
+      const tr = document.createElement('tr');
+      const detalle = esTurno ? `${f.codigo} · ${f.hora_inicio}-${f.hora_fin} · ${esc(f.descripcion || '')}`
+                              : (tabla === 'sectores' ? uniNombre(f.unidad_id) : '');
+      tr.innerHTML = `
+        <td>${esc(f.nombre)}</td>
+        <td>${detalle}</td>
+        <td><span class="chip ${f.activo ? 'on' : 'off'}">${f.activo ? 'activo' : 'inactivo'}</span></td>
+        <td>
+          <button class="btn seco" onclick="toggleCatalogo('${tabla}', ${f.id}, ${!f.activo})">${f.activo ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn seco" onclick="renombrar('${tabla}', ${f.id}, '${escAttr(f.nombre)}')">Renombrar</button>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+    est.textContent = filas.length + ' registros';
+  } catch (e) { est.textContent = 'Error cargando ' + tabla; }
+}
+
+async function crearCatalogo() {
+  const tabla = catalogoActual;
+  const nombre = document.getElementById('cNombre').value.trim();
+  if (!nombre) return;
+  const body = { nombre };
+  if (tabla === 'sectores') body.unidad_id = document.getElementById('cUnidad').value;
+  if (tabla === 'turnos') {
+    body.codigo = document.getElementById('cCodigo').value.trim();
+    body.descripcion = document.getElementById('cDesc').value.trim();
+    body.hora_inicio = document.getElementById('cIni').value || '00:00';
+    body.hora_fin = document.getElementById('cFin').value || '00:00';
+    if (!body.codigo) return;
+  }
+  try {
+    const r = await api(`/rest/v1/${tabla}`, { method: 'POST', body: JSON.stringify(body) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.message || 'Error'); }
+    document.getElementById('cNombre').value = '';
+    cargarCatalogo(tabla);
+  } catch (e) { document.getElementById('estadoCatalogos').textContent = 'Error: ' + (e.message || e); }
+}
+
+async function toggleCatalogo(tabla, id, activo) {
+  await api(`/rest/v1/${tabla}?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ activo }) });
+  cargarCatalogo(catalogoActual);
+}
+
+async function renombrar(tabla, id, actual) {
+  const nombre = prompt('Nuevo nombre:', actual);
+  if (!nombre) return;
+  await api(`/rest/v1/${tabla}?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ nombre }) });
+  cargarCatalogo(catalogoActual);
+}
+
+// ---------- utilidades ----------
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+document.getElementById('btnSalir').addEventListener('click', salir);
+
+iniciar();
+</script>
+</body>
+</html>

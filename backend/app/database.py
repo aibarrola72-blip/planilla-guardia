@@ -122,3 +122,23 @@ def obtener_plan_para(fecha_desde: str, fecha_hasta: str) -> list[dict]:
 def guardar_plan_mensual(filas: list[dict]) -> list[dict] | None:
     """Upsert de celdas del plan mensual (persona_id, fecha, turno_id)."""
     return _upsert("plan_mensual", filas)
+
+
+# ---------- perfiles (roles) ----------
+
+def obtener_perfil(user_id: str) -> list[dict]:
+    """Perfil del usuario. Usado por el backend (service-role) para RLS/autorización."""
+    return _get("perfiles", {"select": "rol,unidad_id,activo", "user_id": f"eq.{user_id}"})
+
+
+def listar_perfiles() -> list[dict]:
+    """Todos los perfiles (para el panel admin)."""
+    return _get("perfiles", {"select": "user_id,rol,unidad_id,activo,updated_at", "order": "updated_at.desc"})
+
+
+def actualizar_perfil(user_id: str, campos: dict) -> None:
+    """Actualiza rol/unidad/activo de un perfil (service-role, bypassea RLS)."""
+    url = f"{config.SUPABASE_URL}/rest/v1/perfiles"
+    headers = _headers()
+    resp = requests.patch(url, headers=headers, json=campos, params={"user_id": f"eq.{user_id}"}, timeout=30)
+    resp.raise_for_status()

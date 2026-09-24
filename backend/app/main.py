@@ -1,12 +1,15 @@
-"""API de reportes de guardia - INERAM.
+"""API de reportes y administración - INERAM.
 
-La app móvil llama a /api/reporte/mensual para obtener el HTML o PDF
-de la planilla mensual de guardia.
+La app móvil llama a /api/reporte/mensual (con sesión) para obtener el HTML
+o PDF de la planilla mensual. El admin opera desde el panel web /admin
+(gestiona usuarios y catálogos).
 """
 
 from __future__ import annotations
 
 import calendar
+import pathlib
+
 from datetime import datetime
 
 import requests
@@ -14,13 +17,18 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from . import config, database, proxy, reporte
+from . import config, database, proxy, reporte, seguridad
 
 app = FastAPI(
     title="Reportes INERAM",
-    description="Generación de la planilla de guardia mensual de enfermería",
-    version="0.1.0",
+    description="Planilla de guardia mensual de enfermería + panel admin",
+    version="0.2.0",
 )
+
+_ADMIN_HTML = pathlib.Path(config.TEMPLATES_DIR, "admin", "index.html")
+
+ROLES_GESTION = {"admin", "jefe_enfermeria"}
+ROLES_REPORTE = {"admin", "jefe_enfermeria", "jefe"}
 
 
 class ReporteRequest(BaseModel):
@@ -31,6 +39,18 @@ class ReporteRequest(BaseModel):
     formato: str = Field(default="html", pattern="^(html|pdf)$")
 
 
+class UsuarioRequest(BaseModel):
+    email: str = Field(min_length=3)
+    rol: str | None = None
+    unidad_id: int | None = None
+
+
+class UsuarioPatch(BaseModel):
+    rol: str | None = None
+    unidad_id: int | None = None
+    activo: bool | None = None
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "servicio": "reportes-ineram"}
@@ -38,7 +58,20 @@ def health():
 
 @app.get("/")
 def raiz():
-    return {"servicio": "reportes-ineram", "endpoints": ["/api/reporte/mensual", "/reporte"]}
+    return {
+        "servicio": "reportes-ineram",
+        "endpoints": ["/api/reporte/mensual", "/reporte", "/admin"],
+    }
+
+
+@app.get("/api/config")
+def config_app():
+    """Configuración pública para el panel web (la anon key es pública)."""
+    return {
+        "supabaseUrl": config.SUPABASE_URL,
+        "anonKey": config.SUPABASE_ANON_KEY,
+        "roles": list(config.ROLES_VALIDOS),
+    }
 
 
 # ---------------------------------------------------------------
@@ -57,60 +90,167 @@ for _servicio in ("rest", "auth", "storage"):
 
 
 # ---------------------------------------------------------------
-# Invitación de jefe: genera la invitación de Supabase con redirect hacia
-# la app (ineramapp://...) para que el correo abra la app, no una página
-# inválida de Supabase.
+# Invitación / creación de usuarios (web admin + jefe → RT)
 # ---------------------------------------------------------------
-class InvitarRequest(BaseModel):
-    email: str = Field(min_length=3)
-
-
-@app.post("/api/invitar")
-def invitar_jefe(body: InvitarRequest, request: Request):
-    cabecera = request.headers.get("Authorization", "")
-    if not cabecera.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Sesión requerida")
-    token = cabecera[7:]
-
-    # Validar el JWT del jefe contra GoTrue antes de invitaciones.
-    # Usamos el mismo apikey que manda la app (siempre correcto); solo si
-    # faltara, caemos a la clave anónima del entorno del servidor.
-    apikey_auth = request.headers.get("apikey") or config.SUPABASE_ANON_KEY
+def _buscar_usuario_por_email(email: str) -> dict | None:
+    """Devuelve el usuario de Supabase Auth con ese email (o None)."""
     try:
-        resp_usuario = requests.get(
-            f"{config.SUPABASE_URL}/auth/v1/user",
-            headers={"apikey": apikey_auth, "Authorization": f"Bearer {token}"},
-            timeout=30,
-        )
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"No se pudo validar la sesión: {exc}") from exc
-    if resp_usuario.status_code != 200:
-        raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
-
-    try:
-        resp = requests.post(
-            f"{config.SUPABASE_URL}/auth/v1/admin/generate_link",
+        resp = requests.get(
+            f"{config.SUPABASE_URL}/auth/v1/admin/users",
             headers={
                 "apikey": config.SUPABASE_SERVICE_ROLE_KEY,
                 "Authorization": f"Bearer {config.SUPABASE_SERVICE_ROLE_KEY}",
             },
-            json={
-                "type": "invite",
-                "email": body.email,
-                "options": {"redirect_to": config.AUTH_REDIRECT_URL},
-            },
+            params={"page": 1, "per_page": 1000},
             timeout=30,
         )
     except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"No se pudo contactar Supabase: {exc}") from exc
+        raise HTTPException(status_code=502, detail="No se pudieron listar usuarios") from exc
     if resp.status_code != 200:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Supabase respondió {resp.status_code}: {resp.text[:200]}",
+        raise HTTPException(status_code=502, detail="No se pudieron listar usuarios")
+    for u in resp.json().get("users", []):
+        if u.get("email") == email:
+            return u
+    return None
+
+
+def _crear_o_actualizar_usuario(
+    email: str, rol: str | None, unidad_id: int | None, perfil: dict
+) -> dict:
+    """Invita (o reenvía enlace a) un usuario y ajusta rol/unidad/activo.
+
+    Aplica las reglas de alcance por el rol del solicitante:
+    - jefe: solo puede crear RT de su propia unidad.
+    - admin / jefe_enfermeria: cualquier rol/unidad.
+    """
+    rol_nuevo = rol or "rt"
+
+    if perfil["rol"] == "jefe":
+        if rol_nuevo != "rt":
+            raise HTTPException(status_code=403, detail="Un jefe de unidad solo puede invitar RT")
+        if not (unidad_destino := perfil.get("unidad_id")):
+            raise HTTPException(status_code=403, detail="Su perfil no tiene unidad asignada")
+        if unidad_id not in (unidad_destino, None):
+            raise HTTPException(status_code=403, detail="Solo puede invitar RT de su unidad")
+    else:
+        # admin / jefe_enfermeria
+        if rol_nuevo not in config.ROLES_VALIDOS:
+            raise HTTPException(status_code=400, detail="Rol inválido")
+        if rol_nuevo == "rt" and unidad_id is None:
+            raise HTTPException(status_code=400, detail="Un RT necesita unidad asignada")
+        unidad_destino = unidad_id
+
+    existente = _buscar_usuario_por_email(email)
+    if existente is None:
+        # Usuario nuevo: generate_link crea el usuario pendiente y envía la invitación.
+        seguridad.generar_invitacion(email)
+        existente = _buscar_usuario_por_email(email)
+    else:
+        # Usuario ya registrado: reenviamos enlace para definir contraseña.
+        seguridad.enviar_recuperacion(email)
+
+    user_id = existente["id"] if existente else None
+    if user_id:
+        filas = database.obtener_perfil(user_id)
+        if filas:
+            database.actualizar_perfil(user_id, {"rol": rol_nuevo, "activo": True, "unidad_id": unidad_destino})
+
+    return {"email": email, "rol": rol_nuevo, "unidad_id": unidad_destino}
+
+
+@app.post("/api/invitar")
+def invitar(body: UsuarioRequest, request: Request):
+    """Invita a un nuevo usuario con rol/unidad (app móvil: jefe → RT)."""
+    info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
+    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"])
+    return {"ok": True, **resultado}
+
+
+@app.get("/api/usuarios")
+def listar_usuarios(request: Request):
+    """Lista usuarios+perfiles. Admin/enfermeria: todos. Jefe: RTs de su unidad."""
+    info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
+    perfiles = database.listar_perfiles()
+    try:
+        resp = requests.get(
+            f"{config.SUPABASE_URL}/auth/v1/admin/users",
+            headers={
+                "apikey": config.SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {config.SUPABASE_SERVICE_ROLE_KEY}",
+            },
+            params={"page": 1, "per_page": 1000},
+            timeout=30,
         )
-    return {"ok": True, "email": body.email}
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail="No se pudieron listar usuarios") from exc
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="No se pudieron listar usuarios")
+
+    emails = {u["id"]: u.get("email") for u in resp.json().get("users", [])}
+    filas = []
+    for p in perfiles:
+        uid = p["user_id"]
+        if info["perfil"]["rol"] == "jefe":
+            if p.get("rol") != "rt" or p.get("unidad_id") != info["perfil"].get("unidad_id"):
+                continue
+        filas.append({
+            "user_id": uid,
+            "email": emails.get(uid, ""),
+            "rol": p.get("rol"),
+            "unidad_id": p.get("unidad_id"),
+            "activo": p.get("activo"),
+        })
+    return {"usuarios": filas}
 
 
+@app.post("/api/usuarios")
+def crear_usuario(body: UsuarioRequest, request: Request):
+    """Crea + invita un usuario (web admin / jefe → RT)."""
+    info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
+    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"])
+    return {"ok": True, **resultado}
+
+
+@app.patch("/api/usuarios/{user_id}")
+def actualizar_usuario(user_id: str, body: UsuarioPatch, request: Request):
+    """Cambia rol/unidad/activo. Jefe: solo RT de su unidad."""
+    info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
+    filas = database.obtener_perfil(user_id)
+    if not filas:
+        raise HTTPException(status_code=404, detail="Usuario sin perfil")
+
+    destino = filas[0]
+    if info["perfil"]["rol"] == "jefe":
+        if destino.get("rol") != "rt" or destino.get("unidad_id") != info["perfil"].get("unidad_id"):
+            raise HTTPException(status_code=403, detail="Solo puede modificar RT de su unidad")
+        if body.rol not in (None, "rt"):
+            raise HTTPException(status_code=403, detail="Un jefe solo puede gestionar RT")
+        if body.unidad_id not in (None, info["perfil"].get("unidad_id")):
+            raise HTTPException(status_code=403, detail="Solo puede operar sobre su unidad")
+
+    campos: dict = {
+        k: v for k, v in body.model_dump(exclude_none=True).items()
+    }
+    if not campos:
+        raise HTTPException(status_code=400, detail="Sin cambios")
+    database.actualizar_perfil(user_id, campos)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------
+# Panel de administración (web)
+# ---------------------------------------------------------------
+@app.get("/admin")
+def panel_admin():
+    """Panel web del admin: gestión de usuarios y catálogos."""
+    if not _ADMIN_HTML.exists():
+        raise HTTPException(status_code=404, detail="Panel no disponible")
+    return HTMLResponse(_ADMIN_HTML.read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------
+# Reporte mensual
+# ---------------------------------------------------------------
 def _generar(
     anio: int,
     mes: int,
@@ -135,7 +275,7 @@ def _generar(
     try:
         datos = _leer()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error leyendo datos: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Error leyendo datos") from exc
 
     try:
         return reporte.generar_reporte(
@@ -147,11 +287,12 @@ def _generar(
             formato=formato,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error generando reporte: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Error generando el reporte") from exc
 
 
 @app.post("/api/reporte/mensual")
-def reporte_mensual(body: ReporteRequest):
+def reporte_mensual(body: ReporteRequest, request: Request):
+    seguridad.requerir_perfil(request, ROLES_REPORTE)
     contenido, media_type, unidad_nombre = _generar(
         anio=body.anio,
         mes=body.mes,
@@ -174,11 +315,14 @@ def reporte_mensual(body: ReporteRequest):
 def reporte_web(
     anio: int,
     mes: int,
+    request: Request,
     formato: str = "html",
     unidad_ids: str = "",
     sector_ids: str = "",
 ):
-    """Vista web de la planilla: /reporte?anio=2026&mes=9"""
+    """Vista web de la planilla: /reporte?anio=2026&mes=9 (requiere sesión)."""
+    seguridad.requerir_perfil(request, ROLES_REPORTE)
+
     def _desde_csv(value: str) -> list[int]:
         return [int(x) for x in value.split(",") if x.strip()]
 

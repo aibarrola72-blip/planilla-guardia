@@ -26,6 +26,7 @@ Desktop.ini
 
 # Estado local del CLI de Supabase
 supabase/.temp/
+supabase/.branches/
 
 # Archivos generados/descargados (solo en la raíz del repo)
 /*.pdf
