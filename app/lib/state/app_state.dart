@@ -28,6 +28,36 @@ class AppState extends ChangeNotifier {
   /// Usuario autenticado actual (o null si no hay sesión).
   User? get usuario => SupabaseService.instance.usuario;
 
+  String? _rol;
+  int? _unidadId;
+  bool _activo = true;
+
+  /// Rol del usuario en la planilla: 'admin', 'jefe_enfermeria', 'jefe' o 'rt'.
+  String? get rol => _rol;
+
+  /// Unidad a la que pertenece (para jefes y RT). null para los globales.
+  int? get unidadId => _unidadId;
+
+  bool get activo => _activo;
+
+  /// admin y jefe_enfermeria operan desde la app en modo consulta.
+  bool get esConsulta => _rol == 'admin' || _rol == 'jefe_enfermeria';
+  bool get esJefe => _rol == 'jefe';
+  bool get esRT => _rol == 'rt';
+  bool get puedeInvitar => _rol == 'jefe';
+  bool get puedeEditarPersonal => esJefe || esConsulta;
+  bool get puedeEditarCatalogos => esConsulta;
+  bool get puedeEditarPlan => esJefe;
+  bool get puedeEditarAusencias => esJefe || esRT;
+
+  Future<void> _cargarPerfil() async {
+    final p = await SupabaseService.instance.perfil();
+    _rol = p?['rol'] as String?;
+    _unidadId = p?['unidad_id'] as int?;
+    _activo = (p?['activo'] as bool?) ?? true;
+    notifyListeners();
+  }
+
   bool _recuperandoContrasena = false;
   bool get recuperandoContrasena => _recuperandoContrasena;
 
@@ -44,6 +74,7 @@ class AppState extends ChangeNotifier {
   /// Fuerza una actualización del flag de sesión al iniciar.
   void sincronizar() {
     _tieneSesion = SupabaseService.instance.usuario != null;
+    if (_tieneSesion) _cargarPerfil();
     notifyListeners();
   }
 
@@ -52,19 +83,7 @@ class AppState extends ChangeNotifier {
     try {
       await SupabaseService.instance.iniciarSesion(email, password);
       _tieneSesion = true;
-      notifyListeners();
-      return true;
-    } on AuthException catch (e) {
-      _error = e.message;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> crearCuenta(String email, String password) async {
-    _error = null;
-    try {
-      await SupabaseService.instance.crearUsuario(email, password);
+      await _cargarPerfil();
       notifyListeners();
       return true;
     } on AuthException catch (e) {
@@ -106,11 +125,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Invita a un nuevo jefe por correo. Devuelve true si fue enviado.
-  Future<bool> invitarJefe(String email) async {
+  /// Invita a un nuevo RT por correo. Devuelve true si fue enviado.
+  Future<bool> invitarRT(String email) async {
     _error = null;
     try {
-      await SupabaseService.instance.invitarJefe(email);
+      await SupabaseService.instance.invitarRT(email);
       return true;
     } catch (e) {
       _error = 'Error al invitar: $e';

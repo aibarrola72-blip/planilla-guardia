@@ -8,6 +8,7 @@ class PersonalEditScreen extends StatefulWidget {
   const PersonalEditScreen({
     super.key,
     this.persona,
+    this.soloLectura = false,
     required this.unidades,
     required this.sectores,
     required this.cargos,
@@ -15,6 +16,7 @@ class PersonalEditScreen extends StatefulWidget {
   });
 
   final Persona? persona;
+  final bool soloLectura;
   final List<Unidad> unidades;
   final List<Sector> sectores;
   final List<Cargo> cargos;
@@ -122,12 +124,20 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.persona == null ? 'Nuevo personal' : 'Editar personal'),
+        title: Text(
+          widget.persona == null
+              ? 'Nuevo personal'
+              : widget.soloLectura
+                  ? 'Personal (solo lectura)'
+                  : 'Editar personal',
+        ),
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewPadding.bottom + 24),
-        child: Form(
-          key: _form,
+        child: AbsorbPointer(
+          absorbing: widget.soloLectura,
+          child: Form(
+            key: _form,
           child: Column(
             children: [
               TextFormField(
@@ -242,16 +252,19 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
                 value: _activo,
                 onChanged: (v) => setState(() => _activo = v),
               ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _guardando ? null : _guardar,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Guardar'),
+              if (!widget.soloLectura) ...[
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: _guardando ? null : _guardar,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('Guardar'),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
+        ),
         ),
       ),
     );

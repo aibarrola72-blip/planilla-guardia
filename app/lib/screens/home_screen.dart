@@ -19,12 +19,23 @@ class HomeScreen extends StatelessWidget {
     final enviar = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Invitar nuevo jefe'),
-        content: TextField(
-          controller: control,
-          keyboardType: TextInputType.emailAddress,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Correo electrónico'),
+        title: const Text('Invitar nuevo personal'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: control,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Correo electrónico'),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Con la invitación puede cargar Libres y Vacaciones de esta unidad.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
@@ -36,7 +47,7 @@ class HomeScreen extends StatelessWidget {
     final email = control.text.trim();
     if (enviar != 'enviar' || email.isEmpty) return;
 
-    final ok = await appState.invitarJefe(email);
+    final ok = await appState.invitarRT(email);
     material.showSnackBar(
       SnackBar(
         content: Text(ok ? 'Invitación enviada a $email' : appState.error ?? 'Error al invitar'),
@@ -53,10 +64,17 @@ class HomeScreen extends StatelessWidget {
     (icono: Icons.print_outlined, titulo: 'Reporte', ruta: ReporteScreen()),
   ];
 
+  /// El RT solo carga libres y vacaciones.
+  static const _modulosRT = [
+    (icono: Icons.beach_access_outlined, titulo: 'Vacaciones', ruta: AusenciasScreen(tabla: 'vacaciones', titulo: 'Vacaciones')),
+    (icono: Icons.free_cancellation_outlined, titulo: 'Libres', ruta: AusenciasScreen(tabla: 'libres', titulo: 'Libres')),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final estado = context.watch<AppState>();
-    final nombre = estado.usuario?.email ?? 'Jefe de Unidad';
+    final nombre = estado.usuario?.email ?? (estado.esJefe ? 'Jefe de Unidad' : 'Usuario');
+    final modulos = estado.esRT ? _modulosRT : _modulos;
 
     return Scaffold(
       appBar: AppBar(
@@ -70,8 +88,9 @@ class HomeScreen extends StatelessWidget {
                 context.read<AppState>().cerrarSesion();
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'invitar', child: ListTile(leading: Icon(Icons.person_add_outlined), title: Text('Invitar jefe'))),
+            itemBuilder: (_) => [
+              if (estado.puedeInvitar)
+                PopupMenuItem(value: 'invitar', child: ListTile(leading: Icon(Icons.person_add_outlined), title: Text('Invitar personal'))),
               PopupMenuItem(value: 'salir', child: ListTile(leading: Icon(Icons.logout), title: Text('Salir'))),
             ],
           ),
@@ -93,7 +112,7 @@ class HomeScreen extends StatelessWidget {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                children: _modulos.map((m) {
+                children: modulos.map((m) {
                   return Card(
                     clipBehavior: Clip.antiAlias,
                     child: InkWell(

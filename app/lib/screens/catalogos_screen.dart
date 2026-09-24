@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import '../state/app_state.dart';
 
 /// Administración de unidades, sectores y cargos (catálogos creables).
 class CatalogosScreen extends StatefulWidget {
@@ -114,6 +116,8 @@ class _CatalogosScreenState extends State<CatalogosScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final editar = context.watch<AppState>().puedeEditarCatalogos;
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -127,13 +131,15 @@ class _CatalogosScreenState extends State<CatalogosScreen> {
             ],
           ),
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            final tab = DefaultTabController.of(context).index;
-            _crear(_TipoCatalogo.values[tab]);
-          },
-          child: const Icon(Icons.add),
-        ),
+        floatingActionButton: editar
+            ? FloatingActionButton(
+                onPressed: () {
+                  final tab = DefaultTabController.of(context).index;
+                  _crear(_TipoCatalogo.values[tab]);
+                },
+                child: const Icon(Icons.add),
+              )
+            : null,
         body: _cargando
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(
@@ -141,6 +147,7 @@ class _CatalogosScreenState extends State<CatalogosScreen> {
                   _listado(
                     _TipoCatalogo.unidades,
                     [for (final u in _unidades) (u.id, u.nombre, u.activo)],
+                    editable: editar,
                   ),
                   _listado(
                     _TipoCatalogo.sectores,
@@ -152,10 +159,12 @@ class _CatalogosScreenState extends State<CatalogosScreen> {
                           s.activo,
                         ),
                     ],
+                    editable: editar,
                   ),
                   _listado(
                     _TipoCatalogo.cargos,
                     [for (final c in _cargos) (c.id, c.nombre, c.activo)],
+                    editable: editar,
                   ),
                 ],
               ),
@@ -168,7 +177,7 @@ class _CatalogosScreenState extends State<CatalogosScreen> {
     return _unidades.firstWhere((u) => u.id == id, orElse: () => Unidad(id: id, nombre: '?', activo: true)).nombre;
   }
 
-  Widget _listado(_TipoCatalogo tipo, List<(int, String, bool)> items) {
+  Widget _listado(_TipoCatalogo tipo, List<(int, String, bool)> items, {bool editable = true}) {
     return ListView.builder(
       itemCount: items.length,
       itemBuilder: (context, i) {
@@ -177,7 +186,7 @@ class _CatalogosScreenState extends State<CatalogosScreen> {
           title: Text(nombre),
           trailing: Switch(
             value: activo,
-            onChanged: (v) => _alternar(tipo, id, v),
+            onChanged: editable ? (v) => _alternar(tipo, id, v) : null,
           ),
         );
       },

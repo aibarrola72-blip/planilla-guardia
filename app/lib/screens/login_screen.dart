@@ -122,26 +122,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                     child: const Text('Olvidé mi contraseña'),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: _cargando
-                        ? null
-                        : () async {
-                            final ok = await context
-                                .read<AppState>()
-                                .crearCuenta(_email.text.trim(), _password.text);
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  ok
-                                      ? 'Cuenta creada. Revisá tu correo para confirmarla.'
-                                      : context.read<AppState>().error ?? 'Error al crear la cuenta',
-                                ),
-                              ),
-                            );
-                          },
-                    child: const Text('Crear cuenta de jefe'),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Tu cuenta debe ser creada por un administrador.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
               ),

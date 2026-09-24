@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import '../state/app_state.dart';
 import 'personal_edit_screen.dart';
 
 class PersonalListScreen extends StatefulWidget {
@@ -101,14 +103,18 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final estado = context.watch<AppState>();
+    final editar = estado.puedeEditarPersonal;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Personal'),
         actions: [
           PopupMenuButton<String>(
-            onSelected: (v) => setState(() {
-              _incluirInactivos = !_incluirInactivos;
-            }),
+            onSelected: (v) {
+              setState(() => _incluirInactivos = !_incluirInactivos);
+              _cargarTodo();
+            },
             itemBuilder: (_) => [
               CheckedPopupMenuItem(
                 value: 'toggle',
@@ -154,23 +160,25 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => PersonalEditScreen(
-                unidades: _unidades,
-                sectores: _sectores,
-                cargos: _cargos,
-                turnos: _turnos,
-              ),
-            ),
-          );
-          _cargarTodo();
-        },
-        tooltip: 'Agregar personal',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: editar
+          ? FloatingActionButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PersonalEditScreen(
+                      unidades: _unidades,
+                      sectores: _sectores,
+                      cargos: _cargos,
+                      turnos: _turnos,
+                    ),
+                  ),
+                );
+                _cargarTodo();
+              },
+              tooltip: 'Agregar personal',
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -193,10 +201,11 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
                                   sectores: _sectores,
                                   cargos: _cargos,
                                   turnos: _turnos,
+                                  soloLectura: !editar,
                                 ),
                               ),
                             );
-                            _cargarTodo();
+                            if (editar) _cargarTodo();
                           },
                           leading: Text(
                             '${p.orden}',
@@ -215,14 +224,16 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
                                   label: Text('INACTIVO'),
                                   visualDensity: VisualDensity.compact,
                                 ),
-                              IconButton(
-                                icon: const Icon(Icons.arrow_upward),
-                                onPressed: () => _subir(i),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.arrow_downward),
-                                onPressed: () => _bajar(i),
-                              ),
+                              if (editar) ...[
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_upward),
+                                  onPressed: () => _subir(i),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_downward),
+                                  onPressed: () => _bajar(i),
+                                ),
+                              ],
                             ],
                           ),
                         );

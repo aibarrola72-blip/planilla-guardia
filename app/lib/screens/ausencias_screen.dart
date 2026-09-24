@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import '../state/app_state.dart';
 
 /// Pantalla parametrizada para administrar rangos de ausencia.
 /// - `tabla`: 'vacaciones' o 'libres'
@@ -241,6 +243,8 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final editar = context.watch<AppState>().puedeEditarAusencias;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.titulo),
@@ -274,11 +278,13 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _agregar,
-        tooltip: 'Agregar',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: editar
+          ? FloatingActionButton(
+              onPressed: _agregar,
+              tooltip: 'Agregar',
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -297,10 +303,12 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
                                 ? _fmt.format(a.inicio)
                                 : '${_fmt.format(a.inicio)} → ${_fmt.format(a.fin)}',
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _eliminar(a),
-                          ),
+                          trailing: editar
+                            ? IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => _eliminar(a),
+                              )
+                            : null,
                         );
                       },
                     ),

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import '../state/app_state.dart';
 
 /// Plan mensual de turnos: matriz personal × días editables.
 ///
@@ -218,6 +220,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
   @override
   Widget build(BuildContext context) {
     final dias = _diasDelMes;
+    final editar = context.watch<AppState>().puedeEditarPlan;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Plan del mes')),
@@ -238,7 +241,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                             onPressed: () => _cambiarMes(-1),
                           ),
                           Text(
-                            '${_meses[_mes.month - 1]} ${_mes.year}${_esMesPasado ? '  (solo lectura)' : ''}',
+                            '${_meses[_mes.month - 1]} ${_mes.year}${(!editar || _esMesPasado) ? '  (solo lectura)' : ''}',
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           IconButton(
@@ -248,21 +251,22 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                         ],
                       ),
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: _autocompletar,
-                          icon: const Icon(Icons.auto_fix_high),
-                          label: const Text('Autocompletar'),
-                        ),
-                        FilledButton.icon(
-                          onPressed: _esMesPasado ? null : _guardar,
-                          icon: const Icon(Icons.save),
-                          label: const Text('Guardar'),
-                        ),
-                      ],
-                    ),
+                    if (editar)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _autocompletar,
+                            icon: const Icon(Icons.auto_fix_high),
+                            label: const Text('Autocompletar'),
+                          ),
+                          FilledButton.icon(
+                            onPressed: _esMesPasado ? null : _guardar,
+                            icon: const Icon(Icons.save),
+                            label: const Text('Guardar'),
+                          ),
+                        ],
+                      ),
                     const Padding(
                       padding: EdgeInsets.all(8),
                       child: Text(
@@ -276,6 +280,7 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
                       child: _TablaPlan(
                         dias: dias,
                         mes: _mes,
+                        permitirEdicion: editar,
                         personas: _personas,
                         celdas: _celdas,
                         codigoTurno: _codigoTurno,
@@ -298,6 +303,7 @@ class _TablaPlan extends StatelessWidget {
   const _TablaPlan({
     required this.dias,
     required this.mes,
+    required this.permitirEdicion,
     required this.personas,
     required this.celdas,
     required this.codigoTurno,
@@ -309,6 +315,7 @@ class _TablaPlan extends StatelessWidget {
 
   final int dias;
   final DateTime mes;
+  final bool permitirEdicion;
   final List<Persona> personas;
   final Map<String, int> celdas;
   final Map<int, String> codigoTurno;
@@ -393,7 +400,7 @@ class _TablaPlan extends StatelessWidget {
         final esLibreDia = esLibre(persona.id, dia);
         final turnoId = celdas[clave(persona.id, dia)];
         final codigo = turnoId != null ? codigoTurno[turnoId] : null;
-        final editable = !esMesPasado && !esLibreDia;
+        final editable = permitirEdicion && !esMesPasado && !esLibreDia;
 
         return TableViewCell(
           child: InkWell(

@@ -23,9 +23,6 @@ class SupabaseService {
   Future<AuthResponse> iniciarSesion(String email, String password) =>
       _auth.signInWithPassword(email: email, password: password);
 
-  Future<AuthResponse> crearUsuario(String email, String password) =>
-      _auth.signUp(email: email, password: password);
-
   /// Envía el correo de restablecimiento de contraseña con destino a la app
   /// vía deep link (ineramapp://auth/recuperar-contrasena).
   Future<void> recuperarContrasena(String email) => _auth
@@ -35,9 +32,25 @@ class SupabaseService {
   Future<void> restablecerContrasena(String nueva) => _auth
       .updateUser(UserAttributes(password: nueva));
 
-  /// Invita a un nuevo jefe por correo. El enlace del correo abre la app
-  /// (deep link) gracias al redirect configurado en el backend.
-  Future<void> invitarJefe(String email) async {
+  /// Perfil del usuario autenticado (rol, unidad, activo). null si no existe.
+  Future<Map<String, dynamic>?> perfil() async {
+    final usuario = _auth.currentUser;
+    if (usuario == null) return null;
+    try {
+      final filas = await _db
+          .from('perfiles')
+          .select('rol,unidad_id,activo')
+          .eq('user_id', usuario.id);
+      return filas.isEmpty ? null : Map<String, dynamic>.from(filas.first);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Invita a un nuevo RT (carga libres/vacaciones) por correo. El enlace del
+  /// correo abre la app (deep link) gracias al redirect del backend; el backend
+  /// solo permite que un jefe cree RT de su propia unidad.
+  Future<void> invitarRT(String email) async {
     final sesion = _auth.currentSession;
     if (sesion == null) {
       throw const FormatException('Sesión no iniciada');
