@@ -196,7 +196,55 @@ def construir_filas(
     return filas, dias
 
 
-def renderizar_html(filas: list[dict], dias: list[date], anio: int, mes: int, titulo: str) -> str:
+def resolver_firmas(firmas: list[dict], personas: list[dict]) -> list[tuple[str, str]]:
+    """Convierte la config de firmas en líneas (nombre, subtitulo) para el reporte.
+
+    Precedencia por firma:
+      1. persona asignada  (persona_id) -> su nombre
+      2. cargo             (cargo_id)   -> cada personal ACTIVO con ese cargo
+      3. nombre fijo                    -> texto directo
+    """
+    lineas: list[tuple[str, str]] = []
+    for f in firmas or []:
+        if not f.get("activo", True):
+            continue
+        subtitulo = (f.get("subtitulo") or "").strip()
+
+        nombre: str | None = None
+        persona = f.get("persona")
+        if f.get("persona_id") and isinstance(persona, dict):
+            nombre = (persona.get("nombre") or "").strip() or None
+
+        if not nombre and f.get("cargo_id"):
+            con_cargo = [
+                p for p in personas
+                if p.get("cargo_id") == f["cargo_id"] and p.get("estado") == "ACTIVO"
+            ]
+            con_cargo.sort(
+                key=lambda p: (p.get("unidad_id") or 0, p.get("orden") or 0, p.get("nombre") or "")
+            )
+            if con_cargo:
+                for p in con_cargo:
+                    n = (p.get("nombre") or "").strip()
+                    if n:
+                        lineas.append((n, subtitulo))
+                continue
+
+        nombre = (nombre or (f.get("nombre_fijo") or "")).strip()
+        if nombre:
+            lineas.append((nombre, subtitulo))
+
+    return [(n, s) for (n, s) in lineas if n and s]
+
+
+def renderizar_html(
+    filas: list[dict],
+    dias: list[date],
+    anio: int,
+    mes: int,
+    titulo: str,
+    firmas: list[tuple[str, str]] | None = None,
+) -> str:
     env = Environment(
         loader=FileSystemLoader(config.TEMPLATES_DIR),
         autoescape=select_autoescape(["html"]),
@@ -206,7 +254,7 @@ def renderizar_html(filas: list[dict], dias: list[date], anio: int, mes: int, ti
         institucion=config.INSTITUCION,
         institucion_sub=config.INSTITUCION_SUB,
         observacion=config.OBSERVACION,
-        firmas=config.FIRMAS,
+        firmas=firmas or config.FIRMAS,
         mes_nombre=config.MESES_ES[mes - 1],
         anio=anio,
         titulo=titulo,
@@ -257,7 +305,8 @@ def generar_reporte(
         mes=mes,
     )
 
-    html = renderizar_html(filas, dias, anio, mes, titulo)
+    firmas = resolver_firmas(datos.get("firmas") or [], datos.get("personas_todas") or [])
+    html = renderizar_html(filas, dias, anio, mes, titulo, firmas)
 
     if formato == "pdf":
         try:

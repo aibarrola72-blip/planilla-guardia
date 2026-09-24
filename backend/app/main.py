@@ -51,6 +51,14 @@ class UsuarioPatch(BaseModel):
     activo: bool | None = None
 
 
+class FirmaPatch(BaseModel):
+    subtitulo: str | None = None
+    cargo_id: int | None = None
+    persona_id: int | None = None
+    nombre_fijo: str | None = None
+    activo: bool | None = None
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "servicio": "reportes-ineram"}
@@ -238,6 +246,32 @@ def actualizar_usuario(user_id: str, body: UsuarioPatch, request: Request):
 
 
 # ---------------------------------------------------------------
+# Firmas de la planilla (panel admin)
+# ---------------------------------------------------------------
+@app.get("/api/firmas")
+def listar_firmas(request: Request):
+    """Config de firmas + catálogos para el selector del panel."""
+    seguridad.requerir_perfil(request, ROLES_GESTION)
+    return {
+        "firmas": database.obtener_firmas(),
+        "cargos": database.obtener_cargos(),
+        "personas": database.obtener_personal_listado(),
+    }
+
+
+@app.patch("/api/firmas/{clave}")
+def actualizar_firma(clave: str, body: FirmaPatch, request: Request):
+    """Actualiza una firma (subtitulo, cargo, persona o nombre fijo)."""
+    seguridad.requerir_perfil(request, ROLES_GESTION)
+    los_clave = {f["clave"] for f in database.obtener_firmas()}
+    if clave not in los_clave:
+        raise HTTPException(status_code=404, detail="Firma inexistente")
+    campos = body.model_dump(exclude_unset=True)
+    database.actualizar_firma(clave, campos)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------
 # Panel de administración (web)
 # ---------------------------------------------------------------
 @app.get("/admin")
@@ -267,6 +301,8 @@ def _generar(
             "sectores": database.obtener_sectores(),
             "turnos": database.obtener_turnos(),
             "personas": database.obtener_personas(list(unidad_ids), list(sector_ids)),
+            "personas_todas": database.obtener_personas([], []),
+            "firmas": database.obtener_firmas(),
             "vacaciones": database.obtener_vacaciones_descargadas(desde, hasta),
             "libres": database.obtener_libres_descargados(desde, hasta),
             "plan": database.obtener_plan_para(desde, hasta),

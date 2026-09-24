@@ -60,6 +60,7 @@
       <div class="caja tabs">
         <button id="tabUsuarios" class="activo" onclick="mostrarTab('usuarios')">Usuarios</button>
         <button id="tabCatalogos" onclick="mostrarTab('catalogos')">Catálogos</button>
+        <button id="tabFirmas" onclick="mostrarTab('firmas')">Firmas</button>
       </div>
 
       <!-- Usuarios -->
@@ -106,6 +107,14 @@
         </table>
         <div class="estado" id="estadoCatalogos"></div>
       </div>
+
+      <!-- Firmas -->
+      <div id="ctnFirmas" class="caja oculto">
+        <h2>Firmas de la planilla</h2>
+        <div class="aviso">El nombre de cada firma se toma de: 1) la persona asignada, 2) el personal ACTIVO con ese cargo, o 3) el nombre fijo. La firma es independiente de las unidades que se impriman en el reporte.</div>
+        <div id="listaFirmas"></div>
+        <div class="estado" id="estadoFirmas"></div>
+      </div>
     </div>
   </div>
 
@@ -115,6 +124,8 @@ let TOKEN = localStorage.getItem(LS_KEY) || '';
 let CFG = null;            // {supabaseUrl, anonKey, roles}
 let UNIDADES = [];         // carga de unidades para selects
 let catalogoActual = 'unidades';
+let CARGOS_F = [];
+let PERSONAS_F = [];
 let unidadesLoaded = false;
 
 function api(path, opts = {}) {
@@ -137,7 +148,7 @@ async function cargarApp() {
     const r = await api('/api/config');
     CFG = await r.json();
     await cargarUnidades();
-    await Promise.all([cargarUsuarios(), verCatalogo(catalogoActual)]);
+    await Promise.all([cargarUsuarios(), verCatalogo(catalogoActual), cargarFirmas()]);
   } catch (e) { salir(); }
 }
 
@@ -173,9 +184,12 @@ function salir() {
 function mostrarTab(tab) {
   document.getElementById('tabUsuarios').classList.toggle('activo', tab === 'usuarios');
   document.getElementById('tabCatalogos').classList.toggle('activo', tab === 'catalogos');
+  document.getElementById('tabFirmas').classList.toggle('activo', tab === 'firmas');
   document.getElementById('ctnUsuarios').classList.toggle('oculto', tab !== 'usuarios');
   document.getElementById('ctnCatalogos').classList.toggle('oculto', tab !== 'catalogos');
+  document.getElementById('ctnFirmas').classList.toggle('oculto', tab !== 'firmas');
   if (tab === 'catalogos') verCatalogo(catalogoActual);
+  if (tab === 'firmas') cargarFirmas();
 }
 
 // ---------- Unidades (para selects) ----------
@@ -339,6 +353,87 @@ async function renombrar(tabla, id, actual) {
   if (!nombre) return;
   await api(`/rest/v1/${tabla}?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ nombre }) });
   cargarCatalogo(catalogoActual);
+}
+
+// ---------- Firmas ----------
+async function cargarFirmas() {
+  const est = document.getElementById('estadoFirmas');
+  est.textContent = 'Cargando…';
+  try {
+    const r = await api('/api/firmas');
+    if (!r.ok) throw new Error('sin permiso');
+    const j = await r.json();
+    CARGOS_F = j.cargos || [];
+    PERSONAS_F = j.personas || [];
+    renderFirmas(j.firmas || []);
+    est.textContent = '';
+  } catch (e) { est.textContent = 'Error cargando firmas'; }
+}
+
+function nombreFirmaActual(f) {
+  if (f.persona && f.persona.nombre) return f.persona.nombre;
+  if (f.cargo_id) return 'personal con cargo…';
+  return f.nombre_fijo || '—';
+}
+
+function optsCargo(actual) {
+  return '<option value="">— cargo —</option>' + CARGOS_F.map(c =>
+    `<option value="${c.id}" ${c.id == actual ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
+}
+
+function optsPersona(actual) {
+  return '<option value="">— persona —</option>' + PERSONAS_F.map(p =>
+    `<option value="${p.id}" ${p.id == actual ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('');
+}
+
+function renderFirmas(firmas) {
+  const ctn = document.getElementById('listaFirmas');
+  ctn.innerHTML = '';
+  for (const f of firmas) {
+    const clave = esc(f.clave);
+    const div = document.createElement('div');
+    div.style = 'border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;';
+    div.innerHTML = `
+      <div style="font-weight:600;margin-bottom:4px">${clave}
+        <span class="chip ${f.activo ? 'on' : 'off'}">${f.activo ? 'activa' : 'inactiva'}</span></div>
+      <div style="font-size:12px;color:#5a6;margin-bottom:8px">Nombre actual:
+        <strong>${esc(nombreFirmaActual(f))}</strong></div>
+      <div class="fila">
+        <label style="min-width:280px">Subtítulo<input id="sub_${clave}" value="${escAttr(f.subtitulo || '')}" placeholder="Jefa de Sala V y Urgencias Pediátricas"></label>
+        <label>Cargo (por cargo)<select id="cargo_${clave}">${optsCargo(f.cargo_id)}</select></label>
+        <label>Persona (asignada)<select id="persona_${clave}">${optsPersona(f.persona_id)}</select></label>
+        <label>Nombre fijo<input id="fijo_${clave}" value="${escAttr(f.nombre_fijo || '')}" placeholder="Lic. De los Angeles Sanchez"></label>
+      </div>
+      <div class="fila">
+        <button class="btn" onclick="guardarFirma('${f.clave}')">Guardar</button>
+        <button class="btn seco" onclick="toggleFirma('${f.clave}', ${!f.activo})">${f.activo ? 'Desactivar' : 'Activar'}</button>
+      </div>`;
+    ctn.appendChild(div);
+  }
+}
+
+async function guardarFirma(clave) {
+  const est = document.getElementById('estadoFirmas');
+  est.textContent = '';
+  try {
+    const r = await api('/api/firmas/' + clave, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        subtitulo: document.getElementById('sub_' + clave).value.trim(),
+        cargo_id: document.getElementById('cargo_' + clave).value || null,
+        persona_id: document.getElementById('persona_' + clave).value || null,
+        nombre_fijo: document.getElementById('fijo_' + clave).value.trim() || null,
+      })
+    });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || 'Error'); }
+    est.textContent = 'Firma «' + clave + '» guardada';
+    cargarFirmas();
+  } catch (e) { est.textContent = 'Error: ' + (e.message || e); }
+}
+
+async function toggleFirma(clave, activo) {
+  await api('/api/firmas/' + clave, { method: 'PATCH', body: JSON.stringify({ activo }) });
+  cargarFirmas();
 }
 
 // ---------- utilidades ----------

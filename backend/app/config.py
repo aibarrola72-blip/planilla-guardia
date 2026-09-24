@@ -19,7 +19,9 @@ OBSERVACION = (
     'a la fecha solicitada".'
 )
 
-# Lista de firmas que aparece al pie del reporte.
+# Fallback de firmas al pie del reporte. La fuente real es la tabla
+# 'firmas_planilla' (gestionada desde el panel admin: por cargo, por
+# persona o nombre fijo). Se usa solo si la tabla está vacía.
 FIRMAS = [
     ("Lic. De los Angeles Sanchez", "Jefa de Sala V y Urgencias Pediátricas"),
     ("Lic. Laura Gonzalez", "Jefa Dpto. de Enfermería"),

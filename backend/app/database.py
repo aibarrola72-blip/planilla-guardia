@@ -142,3 +142,30 @@ def actualizar_perfil(user_id: str, campos: dict) -> None:
     headers = _headers()
     resp = requests.patch(url, headers=headers, json=campos, params={"user_id": f"eq.{user_id}"}, timeout=30)
     resp.raise_for_status()
+
+
+# ---------- firmas de la planilla ----------
+
+def obtener_firmas() -> list[dict]:
+    """Config de firmas del reporte, con nombre de persona/cargo embebido."""
+    return _get(
+        "firmas_planilla",
+        {
+            "select": "clave,subtitulo,cargo_id,persona_id,nombre_fijo,orden,activo,"
+                      "cargo: cargos(nombre), persona: personas(nombre)",
+            "order": "orden.asc",
+        },
+    )
+
+
+def obtener_personal_listado() -> list[dict]:
+    """Personal completo para selects del panel (incluye inactivos)."""
+    return _get("personas", {"select": "id,nombre,unidad_id,cargo_id,estado", "order": "nombre.asc"})
+
+
+def actualizar_firma(clave: str, campos: dict) -> None:
+    """Actualiza una firma por su clave (service-role, bypassea RLS)."""
+    url = f"{config.SUPABASE_URL}/rest/v1/firmas_planilla"
+    headers = _headers()
+    resp = requests.patch(url, headers=headers, json=campos, params={"clave": f"eq.{clave}"}, timeout=30)
+    resp.raise_for_status()
