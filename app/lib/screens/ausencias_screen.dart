@@ -55,6 +55,7 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
       _cargando = true;
       _error = null;
     });
+    final estado = context.read<AppState>();
     try {
       final resultados = await Future.wait([
         _svc.ausencias(widget.tabla),
@@ -64,8 +65,8 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
       if (!mounted) return;
       setState(() {
         _ausencias = resultados[0] as List<AusenciaRango>;
-        _personas = resultados[1] as List<Persona>;
-        _listaUnidades = resultados[2] as List<Unidad>;
+        _personas = estado.personasPermitidas(resultados[1] as List<Persona>);
+        _listaUnidades = estado.unidadesPermitidas(resultados[2] as List<Unidad>);
         _ordenar(_ausencias);
         _cargando = false;
       });
@@ -241,7 +242,9 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final editar = context.watch<AppState>().puedeEditarAusencias;
+    final estado = context.watch<AppState>();
+    final editar = estado.puedeEditarAusencias;
+    final puedeEliminar = estado.puedeEliminarAusencias;
 
     return Scaffold(
       appBar: AppBar(
@@ -301,7 +304,7 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
                                 ? _fmt.format(a.inicio)
                                 : '${_fmt.format(a.inicio)} → ${_fmt.format(a.fin)}',
                           ),
-                          trailing: editar
+                          trailing: puedeEliminar
                             ? IconButton(
                                 icon: const Icon(Icons.delete_outline),
                                 onPressed: () => _eliminar(a),

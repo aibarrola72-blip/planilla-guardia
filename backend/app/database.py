@@ -124,6 +124,12 @@ def guardar_plan_mensual(filas: list[dict]) -> list[dict] | None:
     return _upsert("plan_mensual", filas)
 
 
+def obtener_persona(persona_id: int) -> dict | None:
+    """Persona por id (para derivar unidad/turno de un RT)."""
+    filas = _get("personas", {"select": "id,nombre,unidad_id,turno_id", "id": f"eq.{persona_id}"})
+    return filas[0] if filas else None
+
+
 # ---------- perfiles (roles) ----------
 
 def _unidades_por_usuario() -> dict:
@@ -146,12 +152,12 @@ def _adjuntar_unidades(perfiles: list[dict]) -> list[dict]:
 
 def obtener_perfil(user_id: str) -> list[dict]:
     """Perfil del usuario. Usado por el backend (service-role) para RLS/autorización."""
-    return _adjuntar_unidades(_get("perfiles", {"select": "user_id,rol,unidad_id,activo", "user_id": f"eq.{user_id}"}))
+    return _adjuntar_unidades(_get("perfiles", {"select": "user_id,rol,unidad_id,activo,persona_id", "user_id": f"eq.{user_id}"}))
 
 
 def listar_perfiles() -> list[dict]:
     """Todos los perfiles (para el panel admin)."""
-    return _adjuntar_unidades(_get("perfiles", {"select": "user_id,rol,unidad_id,activo,updated_at", "order": "updated_at.desc"}))
+    return _adjuntar_unidades(_get("perfiles", {"select": "user_id,rol,unidad_id,activo,persona_id,updated_at", "order": "updated_at.desc"}))
 
 
 def actualizar_perfil(user_id: str, campos: dict) -> None:

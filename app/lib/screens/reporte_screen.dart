@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../config.dart';
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import '../state/app_state.dart';
 
 /// Genera y comparte el PDF mensual de guardia desde el backend de reportes.
 class ReporteScreen extends StatefulWidget {
@@ -46,9 +48,15 @@ class _ReporteScreenState extends State<ReporteScreen> {
   Future<void> _cargarCatalogos() async {
     final r = await Future.wait([_svc.unidades(), _svc.sectores()]);
     if (!mounted) return;
+    final estado = context.read<AppState>();
+    final unidades = estado.unidadesPermitidas(r[0] as List<Unidad>);
+    final permitidas = unidades.map((u) => u.id).toSet();
     setState(() {
-      _unidades = r[0] as List<Unidad>;
-      _sectores = r[1] as List<Sector>;
+      _unidades = unidades;
+      if (_unidadId != null && !permitidas.contains(_unidadId)) _unidadId = null;
+      _sectores = (r[1] as List<Sector>)
+          .where((s) => s.unidadId == null || permitidas.contains(s.unidadId))
+          .toList();
       _cargandoCat = false;
     });
   }

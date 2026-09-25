@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/models.dart';
+import '../services/supabase_service.dart';
 import '../state/app_state.dart';
 import 'ausencias_screen.dart';
 import 'catalogos_screen.dart';
@@ -12,43 +14,71 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   Future<void> _mostrarDialogoInvitar(BuildContext context) async {
+    final estado = context.read<AppState>();
     final control = TextEditingController();
-    final appState = context.read<AppState>();
-    final material = ScaffoldMessenger.of(context);
+    Persona? seleccionado;
+    var personas = <Persona>[];
+    try {
+      personas = await SupabaseService.instance.personas(incluirInactivos: true);
+    } catch (_) {}
+    personas = estado.personasPermitidas(personas);
 
     final enviar = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Invitar nuevo personal'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: control,
-              keyboardType: TextInputType.emailAddress,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Correo electrónico'),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Con la invitación puede cargar Libres y Vacaciones de esta unidad.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Invitar responsable de turno'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: control,
+                keyboardType: TextInputType.emailAddress,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Correo electrónico'),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Responsable de turno (del personal de sus unidades):',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              DropdownButtonFormField<int?>(
+                value: seleccionado?.id,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                hint: const Text('Elegir persona…'),
+                items: personas.map((p) => DropdownMenuItem(
+                  value: p.id,
+                  child: Text(p.etiqueta, overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (v) => setLocal(() {
+                  if (v != null) seleccionado = personas.firstWhere((p) => p.id == v);
+                }),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Con la invitación carga Libres y Vacaciones del personal de su unidad y turno.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop('enviar'),
+              child: const Text('Enviar'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop('enviar'), child: const Text('Enviar')),
-        ],
       ),
     );
 
     final email = control.text.trim();
     if (enviar != 'enviar' || email.isEmpty) return;
 
-    final ok = await appState.invitarRT(email);
-    material.showSnackBar(
+    final appState = context.read<AppState>();
+    final ok = await appState.invitarRT(email, personaId: seleccionado?.id);
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(ok ? 'Invitación enviada a $email' : appState.error ?? 'Error al invitar'),
       ),
@@ -58,6 +88,15 @@ class HomeScreen extends StatelessWidget {
   static const _modulos = [
     (icono: Icons.group_outlined, titulo: 'Personal', ruta: PersonalListScreen()),
     (icono: Icons.settings_outlined, titulo: 'Catálogos', ruta: CatalogosScreen()),
+    (icono: Icons.beach_access_outlined, titulo: 'Vacaciones', ruta: AusenciasScreen(tabla: 'vacaciones', titulo: 'Vacaciones')),
+    (icono: Icons.free_cancellation_outlined, titulo: 'Libres', ruta: AusenciasScreen(tabla: 'libres', titulo: 'Libres')),
+    (icono: Icons.calendar_month_outlined, titulo: 'Plan del mes', ruta: PlanMensualScreen()),
+    (icono: Icons.print_outlined, titulo: 'Reporte', ruta: ReporteScreen()),
+  ];
+
+  /// El jefe gestiona su unidad: sin catálogos (los administra la supervisión).
+  static const _modulosJefe = [
+    (icono: Icons.group_outlined, titulo: 'Personal', ruta: PersonalListScreen()),
     (icono: Icons.beach_access_outlined, titulo: 'Vacaciones', ruta: AusenciasScreen(tabla: 'vacaciones', titulo: 'Vacaciones')),
     (icono: Icons.free_cancellation_outlined, titulo: 'Libres', ruta: AusenciasScreen(tabla: 'libres', titulo: 'Libres')),
     (icono: Icons.calendar_month_outlined, titulo: 'Plan del mes', ruta: PlanMensualScreen()),
@@ -74,7 +113,9 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final estado = context.watch<AppState>();
     final nombre = estado.usuario?.email ?? (estado.esJefe ? 'Jefe de Unidad' : 'Usuario');
-    final modulos = estado.esRT ? _modulosRT : _modulos;
+    final modulos = estado.esRT
+        ? _modulosRT
+        : (estado.esJefe ? _modulosJefe : _modulos);
 
     return Scaffold(
       appBar: AppBar(

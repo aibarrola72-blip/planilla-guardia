@@ -32,25 +32,47 @@ class SupabaseService {
   Future<void> restablecerContrasena(String nueva) => _auth
       .updateUser(UserAttributes(password: nueva));
 
-  /// Perfil del usuario autenticado (rol, unidad, activo). null si no existe.
+  /// Perfil del usuario autenticado (rol, unidad, unidades a cargo, activo,
+  /// persona vinculada). null si no existe.
   Future<Map<String, dynamic>?> perfil() async {
     final usuario = _auth.currentUser;
     if (usuario == null) return null;
     try {
       final filas = await _db
           .from('perfiles')
-          .select('rol,unidad_id,activo')
+          .select('rol,unidad_id,activo,persona_id')
           .eq('user_id', usuario.id);
-      return filas.isEmpty ? null : Map<String, dynamic>.from(filas.first);
+      if (filas.isEmpty) return null;
+      final datos = Map<String, dynamic>.from(filas.first);
+      final unis = await _db
+          .from('perfil_unidades')
+          .select('unidad_id')
+          .eq('user_id', usuario.id);
+      final lista = unis.map((r) => r['unidad_id'] as int).toList();
+      datos['unidades'] = lista.isNotEmpty
+          ? lista
+          : (datos['unidad_id'] != null ? [datos['unidad_id'] as int] : <int>[]);
+      return datos;
     } catch (_) {
       return null;
     }
   }
 
-  /// Invita a un nuevo RT (carga libres/vacaciones) por correo. El enlace del
-  /// correo abre la app (deep link) gracias al redirect del backend; el backend
-  /// solo permite que un jefe cree RT de su propia unidad.
-  Future<void> invitarRT(String email) async {
+  /// Turno de la persona vinculada al usuario (para RT).
+  Future<int?> turnoDePersona(int personaId) async {
+    final datos = await _db
+        .from('personas')
+        .select('turno_id')
+        .eq('id', personaId)
+        .maybeSingle();
+    return datos?['turno_id'] as int?;
+  }
+
+  /// Invita a un nuevo RT (responsable de turno) por correo y lo vincula a una
+  /// persona de la planilla (su unidad y turno definen su alcance). El enlace
+  /// del correo abre la app (deep link); el backend solo permite que un jefe
+  /// cree RT de sus propias unidades.
+  Future<void> invitarRT(String email, {int? personaId}) async {
     final sesion = _auth.currentSession;
     if (sesion == null) {
       throw const FormatException('Sesión no iniciada');
@@ -63,7 +85,7 @@ class SupabaseService {
             'apikey': AppConfig.supabaseAnonKey,
             'Authorization': 'Bearer ${sesion.accessToken}',
           },
-          body: jsonEncode({'email': email}),
+          body: jsonEncode({'email': email, 'persona_id': personaId}),
         )
         .timeout(const Duration(seconds: 60));
     if (resp.statusCode != 200) {

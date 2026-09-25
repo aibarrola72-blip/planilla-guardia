@@ -39,18 +39,22 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
       _cargando = true;
       _error = null;
     });
+    final estado = context.read<AppState>();
     try {
       final personas = await _svc.personas(
         unidadId: _unidadFiltro,
         incluirInactivos: _incluirInactivos,
       );
-      final unidades = await _svc.unidades();
+      final unidades = estado.unidadesPermitidas(await _svc.unidades());
       final sectores = await _svc.sectores();
       final cargos = await _svc.cargos();
       final turnos = await _svc.turnos();
 
       if (!mounted) return;
       setState(() {
+        if (_unidadFiltro != null && !unidades.any((u) => u.id == _unidadFiltro)) {
+          _unidadFiltro = null;
+        }
         _personas = personas;
         _unidades = unidades;
         _sectores = sectores;
