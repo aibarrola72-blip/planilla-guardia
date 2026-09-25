@@ -1,0 +1,17 @@
+# Flutter / Dart
+.dart_tool/
+.build/
+build/
+*.flutter-plugins
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# JavaScript / Node
+node_modules/
+dist/
+.next/
