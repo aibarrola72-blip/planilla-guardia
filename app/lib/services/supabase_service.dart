@@ -93,6 +93,44 @@ class SupabaseService {
     }
   }
 
+  // ---------- Reportes ----------
+
+  /// Genera el PDF/HTML de la planilla en el backend de reportes.
+  /// La API exige sesión: envía el JWT actual (`Bearer`) + apikey.
+  Future<List<int>> generarReporteMensual({
+    required int anio,
+    required int mes,
+    List<int> unidadIds = const [],
+    List<int> sectorIds = const [],
+    String formato = 'pdf',
+  }) async {
+    final sesion = _auth.currentSession;
+    if (sesion == null) {
+      throw const FormatException('Sesión no iniciada');
+    }
+    final resp = await http
+        .post(
+          Uri.parse('${AppConfig.apiReportesUrl}/api/reporte/mensual'),
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': AppConfig.supabaseAnonKey,
+            'Authorization': 'Bearer ${sesion.accessToken}',
+          },
+          body: jsonEncode({
+            'anio': anio,
+            'mes': mes,
+            'unidad_ids': unidadIds,
+            'sector_ids': sectorIds,
+            'formato': formato,
+          }),
+        )
+        .timeout(const Duration(seconds: 90));
+    if (resp.statusCode != 200) {
+      throw Exception('Backend respondió ${resp.statusCode}: ${resp.body}');
+    }
+    return resp.bodyBytes;
+  }
+
   void cerrarSesion() => _auth.signOut();
 
   User? get usuario => _auth.currentUser;

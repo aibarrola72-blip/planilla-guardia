@@ -1,13 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../config.dart';
 import '../models/models.dart';
 import '../services/supabase_service.dart';
 import '../state/app_state.dart';
@@ -70,29 +67,20 @@ class _ReporteScreenState extends State<ReporteScreen> {
       _mensaje = null;
     });
     try {
-      final url = Uri.parse('${AppConfig.apiReportesUrl}/api/reporte/mensual');
-      final resp = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'anio': _anio,
-          'mes': _mes,
-          'unidad_ids': [_unidadId].whereType<int>().toList(),
-          'sector_ids': [_sectorId].whereType<int>().toList(),
-          'formato': 'pdf',
-        }),
-      ).timeout(const Duration(seconds: 90));
-
-      if (resp.statusCode != 200) {
-        throw Exception('Backend respondió ${resp.statusCode}: ${resp.body}');
-      }
+      final bytes = await _svc.generarReporteMensual(
+        anio: _anio,
+        mes: _mes,
+        unidadIds: [_unidadId].whereType<int>().toList(),
+        sectorIds: [_sectorId].whereType<int>().toList(),
+        formato: 'pdf',
+      );
 
       final dir = await getTemporaryDirectory();
       final unidadNombre = _unidadId == null
           ? 'completa'
           : (_unidades.where((u) => u.id == _unidadId).map((u) => u.nombre.toLowerCase()).firstOrNull ?? 'completa');
       final archivo = File('${dir.path}/planilla $unidadNombre ${_mesesLargo[_mes - 1]} $_anio.pdf');
-      await archivo.writeAsBytes(resp.bodyBytes);
+      await archivo.writeAsBytes(bytes);
 
       await Share.shareXFiles(
         [XFile(archivo.path)],

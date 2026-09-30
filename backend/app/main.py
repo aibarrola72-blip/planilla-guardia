@@ -27,7 +27,9 @@ app = FastAPI(
 
 _ADMIN_HTML = pathlib.Path(config.TEMPLATES_DIR, "admin", "index.html")
 
-ROLES_GESTION = {"admin", "jefe_enfermeria"}
+# Gestión (usuarios, firmas): solo admin. El rol 'jefe_enfermeria' es de
+# solo lectura: supervisa datos y genera reportes.
+ROLES_GESTION = {"admin"}
 ROLES_REPORTE = {"admin", "jefe_enfermeria", "jefe"}
 
 
@@ -135,7 +137,7 @@ def _crear_o_actualizar_usuario(
     Aplica las reglas de alcance por el rol del solicitante:
     - jefe: solo puede crear RT de sus unidades. Si aporta persona_id, el RT
       queda vinculado a esa persona (unidad + turno de la planilla).
-    - admin / jefe_enfermeria: cualquier rol/unidad (una o varias).
+    - admin: cualquier rol/unidad (una o varias).
     """
     rol_nuevo = rol or "rt"
 
@@ -165,7 +167,7 @@ def _crear_o_actualizar_usuario(
             unidad_destino = unidad_id or mis_unidades[0]
             unidades = [unidad_destino]
     else:
-        # admin / jefe_enfermeria
+        # admin (el jefe ya quedó cubierto arriba)
         if rol_nuevo not in config.ROLES_VALIDOS:
             raise HTTPException(status_code=400, detail="Rol inválido")
         if persona:
@@ -211,7 +213,7 @@ def invitar(body: UsuarioRequest, request: Request):
 
 @app.get("/api/usuarios")
 def listar_usuarios(request: Request):
-    """Lista usuarios+perfiles. Admin/enfermeria: todos. Jefe: RTs de su unidad."""
+    """Lista usuarios+perfiles. Admin: todos. Jefe: RTs de su unidad."""
     info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
     perfiles = database.listar_perfiles()
     try:

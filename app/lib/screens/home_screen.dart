@@ -94,8 +94,9 @@ class HomeScreen extends StatelessWidget {
     (icono: Icons.print_outlined, titulo: 'Reporte', ruta: ReporteScreen()),
   ];
 
-  /// El jefe gestiona su unidad: sin catálogos (los administra la supervisión).
-  static const _modulosJefe = [
+  /// Módulos sin Catálogos: jefe de unidad y jefe_enfermería (este último
+  /// en modo solo lectura + reporte; los catálogos los administra el admin).
+  static const _modulosSinCatalogos = [
     (icono: Icons.group_outlined, titulo: 'Personal', ruta: PersonalListScreen()),
     (icono: Icons.beach_access_outlined, titulo: 'Vacaciones', ruta: AusenciasScreen(tabla: 'vacaciones', titulo: 'Vacaciones')),
     (icono: Icons.free_cancellation_outlined, titulo: 'Libres', ruta: AusenciasScreen(tabla: 'libres', titulo: 'Libres')),
@@ -115,7 +116,7 @@ class HomeScreen extends StatelessWidget {
     final nombre = estado.usuario?.email ?? (estado.esJefe ? 'Jefe de Unidad' : 'Usuario');
     final modulos = estado.esRT
         ? _modulosRT
-        : (estado.esJefe ? _modulosJefe : _modulos);
+        : (estado.esAdmin ? _modulos : _modulosSinCatalogos);
 
     return Scaffold(
       appBar: AppBar(

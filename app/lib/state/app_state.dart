@@ -50,13 +50,15 @@ class AppState extends ChangeNotifier {
 
   bool get activo => _activo;
 
-  /// admin y jefe_enfermeria operan desde la app en modo consulta.
+  /// admin y jefe_enfermeria leen todo (consulta global). jefe_enfermeria
+  /// es SOLO lectura + reporte: no edita personal ni catálogos.
   bool get esConsulta => _rol == 'admin' || _rol == 'jefe_enfermeria';
+  bool get esAdmin => _rol == 'admin';
   bool get esJefe => _rol == 'jefe';
   bool get esRT => _rol == 'rt';
-  bool get puedeInvitar => _rol == 'jefe';
-  bool get puedeEditarPersonal => esJefe || esConsulta;
-  bool get puedeEditarCatalogos => esConsulta;
+  bool get puedeInvitar => esJefe;
+  bool get puedeEditarPersonal => esJefe || esAdmin;
+  bool get puedeEditarCatalogos => esAdmin;
   bool get puedeEditarPlan => esJefe;
   bool get puedeEditarAusencias => esJefe || esRT;
   bool get puedeEliminarAusencias => esJefe;
