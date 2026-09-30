@@ -72,7 +72,14 @@ def obtener_cargos() -> list[dict]:
     return _get("cargos", {"select": "id,nombre,activo", "activo": "eq.true"})
 
 def obtener_turnos() -> list[dict]:
-    return _get("turnos", {"select": "id,codigo,descripcion,hora_inicio,hora_fin,activo", "activo": "eq.true"})
+    return _get(
+        "turnos",
+        {
+            "select": "id,codigo,descripcion,hora_inicio,hora_fin,activo,"
+                      "regla,rotacion_offset,orden_grupo",
+            "activo": "eq.true",
+        },
+    )
 
 
 def obtener_personas(unidad_ids: list[int], sector_ids: list[int], incluir_inactivos: bool = False) -> list[dict]:
@@ -80,7 +87,8 @@ def obtener_personas(unidad_ids: list[int], sector_ids: list[int], incluir_inact
     params = {
         "select": "id,idpersonal_legacy,nombre,ci,registro,estado,orden,"
                   "unidad_id,sector_id,cargo_id,turno_id,"
-                  "sector: sectores(nombre), cargo: cargos(nombre), turno: turnos(codigo)",
+                  "sector: sectores(nombre), cargo: cargos(nombre), "
+                  "turno: turnos(codigo,orden_grupo)",
         "order": "unidad_id.nullsfirst,sector_id.nullsfirst,orden,nombre",
     }
     if not incluir_inactivos:

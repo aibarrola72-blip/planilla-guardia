@@ -9,8 +9,8 @@ import '../state/app_state.dart';
 /// Plan mensual de turnos: matriz personal × días editables.
 ///
 /// Las vacaciones y libres se cargan en sus módulos; aquí solo se
-/// asignan turnos. El autocompletado usa el turno base con reglas
-/// por defecto (todo 100% editable después).
+/// asignan turnos. El autocompletado aplica la regla declarada en el
+/// catálogo de turnos (turnos.regla); todo queda editable después.
 class PlanMensualScreen extends StatefulWidget {
   const PlanMensualScreen({super.key});
 
@@ -105,50 +105,74 @@ class _PlanMensualScreenState extends State<PlanMensualScreen> {
     }
   }
 
-  /// Autocompletado base desde el turno base de cada persona.
+  /// Autocompletado base desde la regla del turno (turnos.regla):
+  /// LABORABLE -> lun-vie, FIN_SEMANA -> sáb-dom, NOCTURNA -> rotación de
+  /// 3 días anclada en personas.noche_desde, OTRO/sin turno -> se conservan
+  /// las celdas existentes (no se regeneran ni se borran).
   Future<void> _autocompletar() async {
     final nuevas = <String, int>{};
     for (final p in _personas) {
       final turnoId = p.turnoId;
-      if (turnoId == null) continue;
-      final turno = _turnoPorId[turnoId];
-      if (turno == null) continue;
+      final turno = turnoId == null ? null : _turnoPorId[turnoId];
+      if (turno == null) {
+        _conservarCeldas(p.id, nuevas);
+        continue;
+      }
 
-      for (var dia = 1; dia <= _diasDelMes; dia++) {
-        if (_esLibre(p.id, dia)) continue;
-        final fecha = DateTime(_mes.year, _mes.month, dia);
-        final diaSemana = fecha.weekday; // 1=lun ... 7=dom
-        final esFinSemana = diaSemana == 6 || diaSemana == 7;
-
-        switch (turno.codigo) {
-          case 'M': case 'T':
-            if (!esFinSemana) nuevas[_clave(p.id, dia)] = turno.id;
-            break;
-          case 'D':
-            if (esFinSemana) nuevas[_clave(p.id, dia)] = turno.id;
-            break;
-          case 'N1': case 'N2': case 'N3':
-            final baseIdx = {'N1': 0, 'N2': 1, 'N3': 2}[turno.codigo]!;
-            final desde = p.nocheDesde;
-            final lineaInicial = p.nocheInicioLinea;
-            int indice;
-            if (desde != null &&
-                lineaInicial != null &&
-                {'N1', 'N2', 'N3'}.contains(lineaInicial)) {
-              final off = {'N1': 0, 'N2': 1, 'N3': 2}[lineaInicial]!;
-              final diff = DateTime.utc(_mes.year, _mes.month, dia)
-                  .difference(DateTime.utc(desde.year, desde.month, desde.day))
-                  .inDays;
-              indice = ((off + diff) % 3 + 3) % 3;
-            } else {
-              indice = turno.codigo.codeUnitAt(1) - 49; // 1->0, 2->1, 3->2
+      switch (turno.regla) {
+        case 'LABORABLE':
+        case 'FIN_SEMANA':
+          final soloLaborables = turno.regla == 'LABORABLE';
+          for (var dia = 1; dia <= _diasDelMes; dia++) {
+            if (_esLibre(p.id, dia)) continue;
+            final fecha = DateTime(_mes.year, _mes.month, dia);
+            final esFinSemana = fecha.weekday == 6 || fecha.weekday == 7;
+            if (soloLaborables ? !esFinSemana : esFinSemana) {
+              nuevas[_clave(p.id, dia)] = turno.id;
             }
-            if (indice == baseIdx) nuevas[_clave(p.id, dia)] = turno.id;
+          }
+          break;
+
+        case 'NOCTURNA':
+          final baseIdx = turno.offsetNocturna;
+          final off = _offsetDeLinea(p.nocheInicioLinea);
+          final desde = p.nocheDesde;
+          if (baseIdx == null || off == null || desde == null) {
+            _conservarCeldas(p.id, nuevas);
             break;
-        }
+          }
+          for (var dia = 1; dia <= _diasDelMes; dia++) {
+            if (_esLibre(p.id, dia)) continue;
+            final diff = DateTime.utc(_mes.year, _mes.month, dia)
+                .difference(DateTime.utc(desde.year, desde.month, desde.day))
+                .inDays;
+            final indice = ((off + diff) % 3 + 3) % 3;
+            if (indice == baseIdx) nuevas[_clave(p.id, dia)] = turno.id;
+          }
+          break;
+
+        default: // 'OTRO' o regla desconocida: solo asignación manual
+          _conservarCeldas(p.id, nuevas);
       }
     }
     setState(() => _celdas = nuevas);
+  }
+
+  /// Offset de la rotación nocturna para una línea (codigo de turno).
+  int? _offsetDeLinea(String? codigo) {
+    if (codigo == null) return null;
+    for (final t in _turnos) {
+      if (t.codigo == codigo) return t.offsetNocturna;
+    }
+    const legado = {'N1': 0, 'N2': 1, 'N3': 2};
+    return legado[codigo];
+  }
+
+  void _conservarCeldas(int personaId, Map<String, int> destino) {
+    final prefijo = '$personaId|';
+    _celdas.forEach((clave, turnoId) {
+      if (clave.startsWith(prefijo)) destino[clave] = turnoId;
+    });
   }
 
   Future<void> _guardar() async {

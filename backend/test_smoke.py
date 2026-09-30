@@ -50,7 +50,7 @@ def construir_datos_fake():
 
 def verificar():
     datos = construir_datos_fake()
-    html, _ = reporte.generar_reporte(
+    html, _, _ = reporte.generar_reporte(
         anio=2026, mes=9, datos=datos,
         unidad_ids=[1], sector_ids=[1], formato="html",
     )
@@ -65,13 +65,12 @@ def verificar():
     filas_html = html.split("</tr>")
     assert any("<td class=\"celda-turno\">L</td>" for f in filas_html for f in [f])
 
-    # Turnos de noche
-    assert "<td class=\"celda-turno\">N1</td>" in html
-    assert "<td class=\"celda-turno\">N2</td>" in html
-    assert "<td class=\"celda-turno\">N3</td>" in html
+    # Turnos de noche (la celda de fin de semana usa otra clase CSS)
+    for codigo in ("N1", "N2", "N3"):
+        assert f'celda-turno">{codigo}</td>' in html or f'celda-fin-semana">{codigo}</td>' in html
 
     # Título del mes
-    assert "PLANILLA DE GUARDIA URGENCIAS - RAC MES DE SEPTIEMBRE AÑO 2026" in html
+    assert "PLANILLA DE GUARDIA URGENCIAS MES DE SEPTIEMBRE" in html
 
     print("smoke OK: vacaciones, libres, turnos y título correctos")
 

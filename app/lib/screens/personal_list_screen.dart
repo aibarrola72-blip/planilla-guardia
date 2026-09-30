@@ -72,9 +72,7 @@ class _PersonalListScreenState extends State<PersonalListScreen> {
     }
   }
 
-  static const _grupoTurno = {'M': 0, 'T': 1, 'N1': 2, 'N2': 3, 'N3': 4, 'D': 5};
-
-  int _grupo(Persona p) => _grupoTurno[p.turnoCodigo] ?? 6;
+  int _grupo(Persona p) => p.turnoGrupo;
 
   bool _mismoGrupo(Persona a, Persona b) =>
       _grupo(a) == _grupo(b) && (a.unidadId ?? 0) == (b.unidadId ?? 0);

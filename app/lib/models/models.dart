@@ -52,6 +52,9 @@ class Turno {
   final String horaInicio;
   final String horaFin;
   final bool activo;
+  final String regla;
+  final int? rotacionOffset;
+  final int ordenGrupo;
 
   Turno({
     required this.id,
@@ -60,16 +63,50 @@ class Turno {
     required this.horaInicio,
     required this.horaFin,
     required this.activo,
+    required this.regla,
+    required this.rotacionOffset,
+    required this.ordenGrupo,
   });
 
-  factory Turno.fromJson(Map<String, dynamic> json) => Turno(
-        id: json['id'] as int,
-        codigo: json['codigo'] as String? ?? '',
-        descripcion: json['descripcion'] as String? ?? '',
-        horaInicio: json['hora_inicio'] as String? ?? '',
-        horaFin: json['hora_fin'] as String? ?? '',
-        activo: json['activo'] as bool? ?? true,
-      );
+  factory Turno.fromJson(Map<String, dynamic> json) {
+    final codigo = json['codigo'] as String? ?? '';
+    return Turno(
+      id: json['id'] as int,
+      codigo: codigo,
+      descripcion: json['descripcion'] as String? ?? '',
+      horaInicio: json['hora_inicio'] as String? ?? '',
+      horaFin: json['hora_fin'] as String? ?? '',
+      activo: json['activo'] as bool? ?? true,
+      regla: json['regla'] as String? ?? reglaLegada(codigo),
+      rotacionOffset: json['rotacion_offset'] as int?,
+      ordenGrupo: json['orden_grupo'] as int? ?? 99,
+    );
+  }
+
+  /// Fallback para BDs sin turnos.regla (compatibilidad hacia atrás).
+  static String reglaLegada(String codigo) {
+    switch (codigo) {
+      case 'M':
+      case 'T':
+      case 'M1':
+        return 'LABORABLE';
+      case 'D':
+        return 'FIN_SEMANA';
+      case 'N1':
+      case 'N2':
+      case 'N3':
+        return 'NOCTURNA';
+      default:
+        return 'OTRO';
+    }
+  }
+
+  /// Offset de la rotación nocturna (datos, con fallback histórico N1/N2/N3).
+  int? get offsetNocturna {
+    if (rotacionOffset != null) return rotacionOffset;
+    const legado = {'N1': 0, 'N2': 1, 'N3': 2};
+    return legado[codigo];
+  }
 
   String get horario => '$horaInicio - $horaFin';
 }
@@ -88,6 +125,8 @@ class Persona {
   final String? cargoNombre;
   final String? sectorNombre;
   final String? turnoCodigo;
+  final String? turnoRegla;
+  final int? turnoOrdenGrupo;
   final DateTime? nocheDesde;
   final String? nocheInicioLinea;
 
@@ -105,6 +144,8 @@ class Persona {
     this.cargoNombre,
     this.sectorNombre,
     this.turnoCodigo,
+    this.turnoRegla,
+    this.turnoOrdenGrupo,
     this.nocheDesde,
     this.nocheInicioLinea,
   });
@@ -130,9 +171,19 @@ class Persona {
       cargoNombre: (cargo is Map) ? (cargo['nombre'] as String?) : null,
       sectorNombre: (sector is Map) ? (sector['nombre'] as String?) : null,
       turnoCodigo: (turno is Map) ? (turno['codigo'] as String?) : null,
+      turnoRegla: (turno is Map) ? (turno['regla'] as String?) : null,
+      turnoOrdenGrupo: (turno is Map) ? (turno['orden_grupo'] as int?) : null,
       nocheDesde: nocheDesde == null ? null : DateTime.parse(nocheDesde),
       nocheInicioLinea: json['noche_inicio_linea'] as String?,
     );
+  }
+
+  /// Grupo de orden en la planilla (turnos.orden_grupo, con fallback histórico).
+  int get turnoGrupo {
+    final orden = turnoOrdenGrupo;
+    if (orden != null) return orden;
+    const legado = {'M': 0, 'T': 1, 'N1': 2, 'N2': 3, 'N3': 4, 'D': 5};
+    return legado[turnoCodigo] ?? 99;
   }
 
   /// Nombre para la planilla/menú: "Nombre + Cargo + Sector".

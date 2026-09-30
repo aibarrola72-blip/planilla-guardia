@@ -72,10 +72,13 @@ def _agrupar_vacaciones(celdas: list, indices: list[int], texto: str, total: int
 
 
 def _grupo_turno(persona: dict) -> int:
-    """Orden de la planilla por tipo de turno: M, T, N1-3, D y otros al final."""
-    orden_turno = {"M": 0, "T": 1, "N1": 2, "N2": 3, "N3": 4, "D": 5}
-    codigo = (persona.get("turno") or {}).get("codigo")
-    return orden_turno.get(codigo, 6)
+    """Orden de la planilla: turnos.orden_grupo (dato), con fallback al orden histórico."""
+    turno = persona.get("turno") or {}
+    orden = turno.get("orden_grupo")
+    if orden is not None:
+        return orden
+    orden_legado = {"M": 0, "T": 1, "N1": 2, "N2": 3, "N3": 4, "D": 5}
+    return orden_legado.get(turno.get("codigo"), 6)
 
 
 def construir_filas(

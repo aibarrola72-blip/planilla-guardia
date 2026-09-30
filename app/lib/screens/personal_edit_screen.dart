@@ -44,7 +44,7 @@ class _PersonalEditScreenState extends State<PersonalEditScreen> {
 
   bool get _turnoBaseNocturno {
     for (final t in widget.turnos) {
-      if (t.id == _turnoId && ['N1', 'N2', 'N3'].contains(t.codigo)) return true;
+      if (t.id == _turnoId && t.regla == 'NOCTURNA') return true;
     }
     return false;
   }

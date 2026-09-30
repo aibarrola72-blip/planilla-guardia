@@ -109,7 +109,8 @@ class SupabaseService {
   }) async {
     var query = _db
         .from('personas')
-        .select('*, cargo:cargos(nombre), sector:sectores(nombre), turno:turnos(codigo)');
+        .select('*, cargo:cargos(nombre), sector:sectores(nombre), '
+            'turno:turnos(codigo,regla,orden_grupo)');
 
     if (!incluirInactivos) query = query.eq('estado', 'ACTIVO');
     if (sectorId != null) query = query.eq('sector_id', sectorId);
@@ -118,12 +119,10 @@ class SupabaseService {
     final datos = await query.order('id');
     final personas = datos.map((r) => Persona.fromJson(r)).toList();
 
-    // Orden de la planilla: grupos de turno (M, T, N1-3, D) y dentro
+    // Orden de la planilla: grupos de turno (turnos.orden_grupo) y dentro
     // por unidad, número de orden y nombre.
-    const grupoTurno = {'M': 0, 'T': 1, 'N1': 2, 'N2': 3, 'N3': 4, 'D': 5};
-    int grupo(Persona p) => grupoTurno[p.turnoCodigo] ?? 6;
     personas.sort((a, b) {
-      final byGrupo = grupo(a).compareTo(grupo(b));
+      final byGrupo = a.turnoGrupo.compareTo(b.turnoGrupo);
       if (byGrupo != 0) return byGrupo;
       final byUnidad = (a.unidadId ?? 0).compareTo(b.unidadId ?? 0);
       if (byUnidad != 0) return byUnidad;
