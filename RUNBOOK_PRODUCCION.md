@@ -152,7 +152,7 @@ Comprobado hoy:
   con ese cargo), por **persona**, y por **nombre fijo** — presentes en el
   bloque `.firmas` del HTML del reporte.
 - `flutter analyze`: 0 errores, 0 warnings (solo 9 infos preexistentes).
-- APK: `INERAM-Planilla_2026-09-24b.apk` (53.5 MB) ya generado.
+- APK: `INERAM-Planilla_2026-09-30.apk` (53.5 MB) ya generado.
 
 ---
 
@@ -160,7 +160,7 @@ Comprobado hoy:
 
 1. `git checkout main` (o `productivo`)
    `git merge prueba`  → tag `prod-v2-2026-09-24`
-2. Distribuir `INERAM-Planilla_2026-09-24b.apk` (β/test) o subir a
+2. Distribuir `INERAM-Planilla_2026-09-30.apk` (β/test) o subir a
    Play/legacy según flujo actual del cliente.
 3. Al publicar, el alta de nuevos usuarios es **solo por invitación**:
    los RT se generan desde la app (botón "Invitar personal") y los
@@ -175,5 +175,11 @@ Comprobado hoy:
   quitar columnas nuevamente). No se contempla rollback automático.
 - Estado previo restaurable: restaurando el backup de la BD v1
   (Snapshot en Supabase) y redeployando el backend v1 (commit `b79b426`).
+- Migración `20260930010000_enfermeria_solo_lectura.sql` (2026-09-30):
+  `jefe_enfermeria` quedó solo lectura + reporte (9 políticas de escritura
+  pasaron a `es_admin()`; las de lectura no cambian). Rollback manual:
+  volver a sumar `or es_jefe_enfermeria()` en cada `using`/`with check`
+  de `cls.*_write`, `per.personas_write_admin`, `aus.*_write_admin`,
+  `perf.gestion_admin` y `dunidades.gestion`.
 - `backend/.env` contiene claves de **producción**: no usarlas en tests
   locales (el stack local de Supabase está en `127.0.0.1:54xxx`).
