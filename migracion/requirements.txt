@@ -1,0 +1,6 @@
+# Dependencias de los scripts de migración (migracion/*.py).
+# Instalar: backend\.venv\Scripts\pip install -r migracion\requirements.txt
+requests>=2.32
+python-dotenv>=1.0
+openpyxl>=3.1       # importar_excel.py (lectura de listados .xlsx)
+psycopg[binary]>=3.1 # aplicar_sql.py / estado_db.py (SUPABASE_DB_CONNECTION)

@@ -107,6 +107,7 @@
     .firmas {
         width: 100%;
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         gap: 20px;
         margin-top: 42px;
@@ -114,11 +115,14 @@
     }
 
     .firma {
-        width: 32%;
+        flex: 1 1 30%;
+        min-width: 26%;
         text-align: center;
         font-size: 7pt;
         padding-top: 4px;
     }
+
+    .nombre-firma { min-height: 14px; }
 
     .linea-firma { border-top: 1px solid #000; margin-bottom: 5px; }
 </style>
@@ -181,7 +185,7 @@
     {% for nombre, cargo in firmas %}
     <div class="firma">
         <div class="linea-firma"></div>
-        <strong>{{ nombre }}</strong><br>
+        <strong class="nombre-firma">{% if nombre %}{{ nombre }}{% else %}&nbsp;{% endif %}</strong><br>
         {{ cargo }}
     </div>
     {% endfor %}

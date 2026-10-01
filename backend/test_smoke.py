@@ -7,7 +7,10 @@ from app import reporte
 
 def construir_datos_fake():
     return {
-        "unidades": [{"id": 1, "nombre": "URGENCIAS"}],
+        "unidades": [
+            {"id": 1, "nombre": "URGENCIAS"},
+            {"id": 2, "nombre": "PEDIATRIA"},
+        ],
         "sectores": [{"id": 1, "unidad_id": 1, "nombre": "RAC"}],
         "turnos": [
             {"id": 1, "codigo": "M", "hora_inicio": "06:00", "hora_fin": "12:00"},
@@ -45,7 +48,48 @@ def construir_datos_fake():
             {"persona_id": 2, "fecha": "2026-09-05", "turno_id": 4},
             {"persona_id": 2, "fecha": "2026-09-06", "turno_id": 5},
         ],
+        "firmas": [
+            {"clave": "jefe_unidad", "subtitulo": "Jefa de Sala V y Urgencias Pediátricas",
+             "activo": True, "orden": 1},
+            {"clave": "jefe_personal", "subtitulo": "Jefe Dpto. de Personal",
+             "nombre_fijo": "Abog. Bernardino Sanabria", "activo": True, "orden": 3},
+        ],
+        "jefes": [
+            {"user_id": "u1", "unidades": [1], "persona": {"nombre": "Lic. Ana Torres"}},
+        ],
     }
+
+
+def verificar_firmas():
+    firmas = [
+        {"clave": "jefe_unidad", "subtitulo": "x", "activo": True, "orden": 1},
+        {"clave": "jefe_personal", "subtitulo": "Jefe Dpto. de Personal",
+         "nombre_fijo": "Abog. Bernardino Sanabria", "activo": True, "orden": 3},
+    ]
+    unidades = [{"id": 1, "nombre": "URGENCIAS"}, {"id": 2, "nombre": "PEDIATRIA"}]
+
+    # 1) Jefe con dos unidades en el reporte -> una sola línea
+    jefes = [{"user_id": "u1", "unidades": [1, 2], "persona": {"nombre": "Lic. Ana Torres"}}]
+    lineas = reporte.resolver_firmas(
+        firmas, [], unidad_ids=[1, 2], jefes=jefes, unidades=unidades)
+    assert ("Lic. Ana Torres", "Jefe de URGENCIAS y PEDIATRIA") in lineas, lineas
+    assert ("Abog. Bernardino Sanabria", "Jefe Dpto. de Personal") in lineas, lineas
+
+    # 2) Unidad sin jefe -> nombre vacío (firma manual)
+    lineas = reporte.resolver_firmas(
+        firmas, [], unidad_ids=[2], jefes=[], unidades=unidades)
+    assert ("", "Jefe de PEDIATRIA") in lineas, lineas
+
+    # 3) Reporte completo (sin unidad_ids) -> todas las unidades del catálogo
+    lineas = reporte.resolver_firmas(
+        firmas, [], unidad_ids=[], jefes=jefes, unidades=unidades)
+    assert ("Lic. Ana Torres", "Jefe de URGENCIAS y PEDIATRIA") in lineas, lineas
+
+    # 4) Sin jefes en los datos -> la clave jefe_unidad no se rompe (legacy)
+    lineas = reporte.resolver_firmas(firmas, [], unidad_ids=[1], unidades=unidades)
+    assert ("", "Jefe de URGENCIAS") not in lineas, lineas
+
+    print("firmas OK: jefe_unidad por unidades, fallback con nombre vacío")
 
 
 def verificar():
@@ -72,8 +116,14 @@ def verificar():
     # Título del mes
     assert "PLANILLA DE GUARDIA URGENCIAS MES DE SEPTIEMBRE" in html
 
-    print("smoke OK: vacaciones, libres, turnos y título correctos")
+    # Firmas: jefe de la unidad impresa + firma fija legacy
+    assert "Lic. Ana Torres" in html
+    assert "Jefe de URGENCIAS" in html
+    assert "PEDIATRIA" not in html.split('<div class="firmas">')[1]
+
+    print("smoke OK: vacaciones, libres, turnos, título y firmas correctos")
 
 
 if __name__ == "__main__":
     verificar()
+    verificar_firmas()

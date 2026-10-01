@@ -199,19 +199,78 @@ def construir_filas(
     return filas, dias
 
 
-def resolver_firmas(firmas: list[dict], personas: list[dict]) -> list[tuple[str, str]]:
+def _firmas_jefe_unidad(
+    unidad_ids: list[int] | None,
+    jefes: list[dict] | None,
+    unidades: list[dict] | None,
+) -> list[tuple[str, str]]:
+    """Líneas de la firma 'jefe_unidad' según las unidades impresas.
+
+    - Una línea por cada jefe (perfil rol='jefe' activo) con unidades en el
+      reporte: nombre de la persona + subtítulo "Jefe de UNI [y UNI2]".
+    - Una línea con nombre VACÍO por cada unidad impresa sin jefe
+      (espacio para firma manual).
+    """
+    nombres_unidad = {
+        u["id"]: (u.get("nombre") or "").strip()
+        for u in (unidades or [])
+        if u.get("nombre")
+    }
+    objetivo = [uid for uid in (unidad_ids or []) if uid in nombres_unidad]
+    if not objetivo:
+        objetivo = [u["id"] for u in (unidades or []) if u["id"] in nombres_unidad]
+
+    # Primer jefe que cubre cada unidad (los que cubren varias, una sola línea)
+    jefe_de: dict[int, dict] = {}
+    for j in jefes or []:
+        for uid in (j.get("unidades") or []):
+            if uid in objetivo and uid not in jefe_de:
+                jefe_de[uid] = j
+
+    lineas: list[tuple[str, str]] = []
+    firmados: set[int] = set()
+    for uid in objetivo:
+        jefe = jefe_de.get(uid)
+        if jefe is None:
+            lineas.append(("", f"Jefe de {nombres_unidad[uid]}"))
+            continue
+        if id(jefe) in firmados:
+            continue
+        firmados.add(id(jefe))
+        suyas = [u for u in objetivo if u in set(jefe.get("unidades") or [])]
+        persona = jefe.get("persona")
+        nombre = (persona.get("nombre") or "").strip() if isinstance(persona, dict) else ""
+        etiqueta = " y ".join(nombres_unidad[u] for u in suyas)
+        lineas.append((nombre, f"Jefe de {etiqueta}"))
+    return lineas
+
+
+def resolver_firmas(
+    firmas: list[dict],
+    personas: list[dict],
+    *,
+    unidad_ids: list[int] | None = None,
+    jefes: list[dict] | None = None,
+    unidades: list[dict] | None = None,
+) -> list[tuple[str, str]]:
     """Convierte la config de firmas en líneas (nombre, subtitulo) para el reporte.
 
     Precedencia por firma:
-      1. persona asignada  (persona_id) -> su nombre
-      2. cargo             (cargo_id)   -> cada personal ACTIVO con ese cargo
-      3. nombre fijo                    -> texto directo
+      1. clave 'jefe_unidad' -> jefes de las unidades impresas (ver
+         _firmas_jefe_unidad); unidad sin jefe -> nombre vacío.
+      2. persona asignada    (persona_id) -> su nombre
+      3. cargo               (cargo_id)   -> cada personal ACTIVO con ese cargo
+      4. nombre fijo                    -> texto directo
     """
     lineas: list[tuple[str, str]] = []
     for f in firmas or []:
         if not f.get("activo", True):
             continue
         subtitulo = (f.get("subtitulo") or "").strip()
+
+        if f.get("clave") == "jefe_unidad" and jefes is not None:
+            lineas.extend(_firmas_jefe_unidad(unidad_ids, jefes, unidades))
+            continue
 
         nombre: str | None = None
         persona = f.get("persona")
@@ -237,7 +296,8 @@ def resolver_firmas(firmas: list[dict], personas: list[dict]) -> list[tuple[str,
         if nombre:
             lineas.append((nombre, subtitulo))
 
-    return [(n, s) for (n, s) in lineas if n and s]
+    # Las líneas 'jefe_unidad' pueden traer nombre vacío (firma manual).
+    return [(n, s) for (n, s) in lineas if s]
 
 
 def renderizar_html(
@@ -308,7 +368,13 @@ def generar_reporte(
         mes=mes,
     )
 
-    firmas = resolver_firmas(datos.get("firmas") or [], datos.get("personas_todas") or [])
+    firmas = resolver_firmas(
+        datos.get("firmas") or [],
+        datos.get("personas_todas") or [],
+        unidad_ids=unidad_ids,
+        jefes=datos.get("jefes"),
+        unidades=datos.get("unidades") or [],
+    )
     html = renderizar_html(filas, dias, anio, mes, titulo, firmas)
 
     if formato == "pdf":

@@ -65,6 +65,7 @@
         <button id="tabUsuarios" class="activo" onclick="mostrarTab('usuarios')">Usuarios</button>
         <button id="tabCatalogos" onclick="mostrarTab('catalogos')">Catálogos</button>
         <button id="tabFirmas" onclick="mostrarTab('firmas')">Firmas</button>
+        <button id="tabImportar" onclick="mostrarTab('importar')">Importar</button>
       </div>
 
       <!-- Usuarios -->
@@ -116,9 +117,30 @@
       <!-- Firmas -->
       <div id="ctnFirmas" class="caja oculto">
         <h2>Firmas de la planilla</h2>
-        <div class="aviso">El nombre de cada firma se toma de: 1) la persona asignada, 2) el personal ACTIVO con ese cargo, o 3) el nombre fijo. La firma es independiente de las unidades que se impriman en el reporte.</div>
+        <div class="aviso">La firma <strong>jefe_unidad</strong> se calcula sola: muestra a los jefes (rol 'jefe') de las unidades impresas en el reporte, con el subtítulo "Jefe de UNIDAD [y UNIDAD2]"; las unidades sin jefe quedan con el nombre en blanco para firmar a mano. En esa clave no se usan persona/cargo ni el nombre fijo. Las demás firmas toman su nombre de: 1) la persona asignada, 2) el personal ACTIVO con ese cargo, o 3) el nombre fijo.</div>
         <div id="listaFirmas"></div>
         <div class="estado" id="estadoFirmas"></div>
+      </div>
+
+      <!-- Importar Excel -->
+      <div id="ctnImportar" class="caja oculto">
+        <h2>Importar listado de personal (.xlsx)</h2>
+        <div class="aviso">Hoja <strong>NOMINA</strong> con las columnas PERSONAL, UNIDAD, SECTOR, CARGO, TURNO, C.I. N°, Reg. N°, ESTADO. La <strong>vista previa no escribe nada</strong>: la importación solo ocurre al pulsar <strong>Aplicar</strong>. El cruce es idpersonal_legacy → CI → nombre+unidad; lo ambiguo queda en "revisión". Las bajas pasan a <strong>INACTIVO</strong> (nunca se borran filas: vacaciones/libres/plan dependen del personal).</div>
+        <div class="fila">
+          <label>Archivo<input id="impArchivo" type="file" accept=".xlsx"></label>
+          <label>Hoja<input id="impHoja" value="NOMINA"></label>
+          <label>Hoja vacaciones<input id="impVac" placeholder="opcional"></label>
+          <label>Hoja libres<input id="impLib" placeholder="opcional"></label>
+        </div>
+        <div class="fila">
+          <label style="flex-direction:row;align-items:center;gap:6px">
+            <input id="impBajasGlobal" type="checkbox"> Bajas en todas las unidades
+          </label>
+          <button class="btn seco" onclick="importar(false)">Vista previa</button>
+          <button class="btn" onclick="importar(true)">Aplicar</button>
+        </div>
+        <div id="impResultado"></div>
+        <div class="estado" id="estadoImportar"></div>
       </div>
     </div>
   </div>
@@ -215,11 +237,78 @@ function mostrarTab(tab) {
   document.getElementById('tabUsuarios').classList.toggle('activo', tab === 'usuarios');
   document.getElementById('tabCatalogos').classList.toggle('activo', tab === 'catalogos');
   document.getElementById('tabFirmas').classList.toggle('activo', tab === 'firmas');
+  document.getElementById('tabImportar').classList.toggle('activo', tab === 'importar');
   document.getElementById('ctnUsuarios').classList.toggle('oculto', tab !== 'usuarios');
   document.getElementById('ctnCatalogos').classList.toggle('oculto', tab !== 'catalogos');
   document.getElementById('ctnFirmas').classList.toggle('oculto', tab !== 'firmas');
+  document.getElementById('ctnImportar').classList.toggle('oculto', tab !== 'importar');
   if (tab === 'catalogos') verCatalogo(catalogoActual);
   if (tab === 'firmas') cargarFirmas();
+}
+
+// ---------- Importación de personal desde Excel ----------
+async function apiForm(path, formData) {
+  const headers = {};
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+  if (CFG) headers['apikey'] = CFG.anonKey;
+  return fetch(path, { method: 'POST', body: formData, headers });
+}
+
+function _listaHtml(titulo, items, prefijo) {
+  if (!items || !items.length) return '';
+  const max = 50;
+  const filas = items.slice(0, max).map(x => `<li>${esc(prefijo + x)}</li>`).join('');
+  const mas = items.length > max ? `<li>… y ${items.length - max} más</li>` : '';
+  return `<p><strong>${esc(titulo)}: ${items.length}</strong></p><ul>${filas}${mas}</ul>`;
+}
+
+function renderImport(j) {
+  const mods = (j.mods || []).map(m =>
+    `${m.nombre}: ${Object.keys(m.campos).map(k => `${k} ${m.antes[k]} → ${m.campos[k]}`).join(', ')}`);
+  const cat = [];
+  for (const [tabla, nombres] of Object.entries(j.catalogos || {})) {
+    if (nombres.length) cat.push(`${tabla}: ${nombres.join(', ')}`);
+  }
+  const aus = j.ausencias
+    ? `<p><strong>Ausencias nuevas</strong>: ${j.ausencias.vacaciones} vacaciones, ${j.ausencias.libres} rangos de libres</p>`
+    : '';
+  document.getElementById('impResultado').innerHTML = `
+    <p><strong>${j.aplicado ? 'APLICADO' : 'Vista previa (sin escribir)'}</strong> — ${j.filas} filas leídas</p>
+    ${_listaHtml('Altas nuevas', j.altas, '+ ')}
+    ${_listaHtml('Modificaciones', mods, '~ ')}
+    ${_listaHtml('Bajas (INACTIVO)', (j.bajas || []).map(b => b.nombre), '− ')}
+    ${_listaHtml('Revisión (no importadas)', j.revision, '! ')}
+    ${_listaHtml('Catálogos a crear', cat, '')}
+    ${aus}`;
+}
+
+async function importar(aplicar) {
+  const estado = document.getElementById('estadoImportar');
+  const archivo = document.getElementById('impArchivo').files[0];
+  estado.textContent = '';
+  document.getElementById('impResultado').innerHTML = '';
+  if (!archivo) { estado.textContent = 'Elija un archivo .xlsx'; return; }
+  const fd = new FormData();
+  fd.append('file', archivo);
+  fd.append('aplicar', aplicar ? 'true' : 'false');
+  fd.append('hoja', document.getElementById('impHoja').value.trim() || 'NOMINA');
+  const vac = document.getElementById('impVac').value.trim();
+  const lib = document.getElementById('impLib').value.trim();
+  if (vac) fd.append('hoja_vacaciones', vac);
+  if (lib) fd.append('hoja_libres', lib);
+  if (document.getElementById('impBajasGlobal').checked) fd.append('bajas_global', 'true');
+  estado.textContent = aplicar ? 'Aplicando importación…' : 'Calculando vista previa…';
+  try {
+    const r = await apiForm('/api/admin/importar-personas', fd);
+    const j = await r.json();
+    if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail || j));
+    renderImport(j);
+    estado.textContent = j.aplicado
+      ? 'Importación aplicada correctamente.'
+      : 'Vista previa: no se escribió nada. Pulse "Aplicar" para confirmar.';
+  } catch (e) {
+    estado.textContent = 'Error: ' + e.message;
+  }
 }
 
 // ---------- Unidades y personal (para selects/chips) ----------

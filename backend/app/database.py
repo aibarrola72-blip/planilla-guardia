@@ -189,6 +189,22 @@ def reemplazar_unidades(user_id: str, unidades: list[int]) -> None:
     actualizar_perfil(user_id, {"unidad_id": unidades[0] if unidades else None})
 
 
+# ---------- escritura genérica (service-role, bypasea RLS) ----------
+
+def crear_filas(tabla: str, filas: list[dict]) -> list[dict] | None:
+    """INSERT multi-fila. Devuelve las filas insertadas o None si no hay nada."""
+    if not filas:
+        return None
+    return _post(tabla, filas)
+
+
+def actualizar_filas(tabla: str, params: dict, campos: dict) -> None:
+    """UPDATE (PATCH) con filtros PostgREST, p. ej. {'id': 'eq.12'}."""
+    url = f"{config.SUPABASE_URL}/rest/v1/{tabla}"
+    resp = requests.patch(url, headers=_headers(), params=params, json=campos, timeout=60)
+    resp.raise_for_status()
+
+
 # ---------- firmas de la planilla ----------
 
 def obtener_firmas() -> list[dict]:
@@ -201,6 +217,22 @@ def obtener_firmas() -> list[dict]:
             "order": "orden.asc",
         },
     )
+
+
+def obtener_jefes() -> list[dict]:
+    """Perfiles rol='jefe' activos: unidades a cargo + nombre de la persona.
+
+    Usado por el reporte para resolver la firma 'jefe_unidad' según las
+    unidades impresas (perfil_unidades + nombre vía perfiles.persona_id).
+    """
+    return _adjuntar_unidades(_get(
+        "perfiles",
+        {
+            "select": "user_id,rol,activo,persona_id,persona: personas(nombre)",
+            "rol": "eq.jefe",
+            "activo": "eq.true",
+        },
+    ))
 
 
 def obtener_personal_listado() -> list[dict]:

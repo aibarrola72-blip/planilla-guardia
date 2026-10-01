@@ -13,11 +13,11 @@ import pathlib
 from datetime import datetime
 
 import requests
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from . import config, database, proxy, reporte, seguridad
+from . import config, database, importar_personas, proxy, reporte, seguridad
 
 app = FastAPI(
     title="Reportes INERAM",
@@ -333,6 +333,55 @@ def actualizar_firma(clave: str, body: FirmaPatch, request: Request):
 
 
 # ---------------------------------------------------------------
+# Importación masiva de personal desde Excel (panel admin)
+# ---------------------------------------------------------------
+MAX_XLSX_BYTES = 5 * 1024 * 1024
+
+
+@app.post("/api/admin/importar-personas")
+def importar_personal_excel(
+    request: Request,
+    file: UploadFile = File(...),
+    aplicar: bool = Form(False),
+    hoja: str = Form("NOMINA"),
+    hoja_vacaciones: str = Form(""),
+    hoja_libres: str = Form(""),
+    bajas_global: bool = Form(False),
+    solo_personal: bool = Form(False),
+    sin_alta_catalogos: bool = Form(False),
+):
+    """Vista previa (aplicar=false, default) o ejecución (aplicar=true) de un .xlsx.
+
+    Devuelve el mismo informe que el CLI: altas, mods, bajas, revisión,
+    catálogos a crear y ausencias. Solo rol admin.
+    """
+    seguridad.requerir_perfil(request, ROLES_GESTION)
+    nombre = (file.filename or "").lower()
+    if not nombre.endswith(".xlsx") or nombre.startswith("~$"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .xlsx")
+    datos = file.file.read(MAX_XLSX_BYTES + 1)
+    if len(datos) > MAX_XLSX_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera 5 MB")
+
+    ops = importar_personas.Opciones(
+        hoja=hoja.strip() or "NOMINA",
+        hoja_vacaciones=hoja_vacaciones.strip() or None,
+        hoja_libres=hoja_libres.strip() or None,
+        aplicar=aplicar,
+        solo_personal=solo_personal,
+        bajas_global=bajas_global,
+        sin_alta_catalogos=sin_alta_catalogos,
+    )
+    try:
+        informe = importar_personas.ejecutar_importacion(datos, ops)
+    except importar_personas.ErrorImportacion as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Error importando: {exc}") from exc
+    return informe.como_dict()
+
+
+# ---------------------------------------------------------------
 # Panel de administración (web)
 # ---------------------------------------------------------------
 @app.get("/admin")
@@ -364,6 +413,7 @@ def _generar(
             "personas": database.obtener_personas(list(unidad_ids), list(sector_ids)),
             "personas_todas": database.obtener_personas([], []),
             "firmas": database.obtener_firmas(),
+            "jefes": database.obtener_jefes(),
             "vacaciones": database.obtener_vacaciones_descargadas(desde, hasta),
             "libres": database.obtener_libres_descargados(desde, hasta),
             "plan": database.obtener_plan_para(desde, hasta),

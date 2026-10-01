@@ -92,13 +92,38 @@ reportes (nunca en la app).
 La clave de referencia histórica es `idpersonal_legacy` (id de AppSheet);
 vacaciones/libres se cruzan por CI normalizado.
 
+### Importación masiva desde Excel (listados de personal)
+
+Núcleo único en `backend/app/importar_personas.py`, con dos caras:
+
+| Vía     | Uso                                                                                                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Panel** | `/admin` → pestaña **Importar** → *Vista previa* (no escribe) → *Aplicar*; `POST /api/admin/importar-personas`, solo rol `admin`, `.xlsx` ≤ 5 MB                          |
+| **CLI**   | `python migracion/importar_excel.py listado.xlsx [--aplicar] [--hoja-vacaciones V] [--hoja-libres L] [--bajas-global] [--solo-personal] [--sin-alta-catalogos]` (dry-run)  |
+
+Reglas comunes:
+
+- Hoja `NOMINA` con las mismas columnas del origen Google Sheets.
+- Cruce por persona: `idpersonal_legacy` → `ci` (solo si es única) →
+  `nombre` + `unidad_id`. Ambiguo, CI duplicada o fila repetida →
+  **revisión** y no se importa.
+- Bajas = `estado='INACTIVO'`, nunca `DELETE` (`vacaciones`, `libres` y
+  `plan_mensual` cuelgan de `personas` con `on delete cascade`); por
+  defecto solo alcanza a las unidades presentes en el archivo.
+- Campo vacío en el Excel → no modifica ese dato en BD.
+- Dependencias: `openpyxl` + `python-multipart` (`backend/requirements.txt`
+  y `migracion/requirements.txt`).
+- Tests (sin red): `python backend/test_importar_personas.py` y
+  `python backend/test_smoke.py`.
+
 ## Estructura del repositorio
 
 ```
 Reportes - INERAM/
   supabase/001_schema.sql      # esquema + RLS + seed
   backend/                     # FastAPI (reportes HTML/PDF)
-    app/                       #   config, database (PostgREST), reporte, main
+    app/                       #   config, database (PostgREST), reporte, main,
+                               #   importar_personas (núcleo Excel)
     templates/reporte.html     #   plantilla impresa (Jinja2)
     assets/                    #   logos
   app/                         # Flutter
@@ -110,6 +135,7 @@ Reportes - INERAM/
       screens/                 #   login, home, personal, catálogos,
                                #   vacaciones/libres, plan del mes, reporte
   migracion/importar_sheets.py # import desde Google Sheets
+  migracion/importar_excel.py   # merge masivo desde Excel (NOMINA)
 ```
 
 ## API (backend de reportes)
