@@ -138,17 +138,16 @@ def _crear_o_actualizar_usuario(
     - jefe: solo puede crear RT de sus unidades. Si aporta persona_id, el RT
       queda vinculado a esa persona (unidad + turno de la planilla).
     - admin: cualquier rol/unidad (una o varias).
+    El vínculo persona_id vale para cualquier rol: en un 'jefe' alimenta la
+    firma 'jefe_unidad' del reporte; en un 'rt' además define su unidad.
     """
     rol_nuevo = rol or "rt"
 
     persona = None
     if persona_id:
-        if rol_nuevo != "rt":
-            persona_id = None  # el vínculo persona solo aplica a responsables de turno
-        else:
-            persona = database.obtener_persona(persona_id)
-            if persona is None:
-                raise HTTPException(status_code=400, detail="Persona no encontrada")
+        persona = database.obtener_persona(persona_id)
+        if persona is None:
+            raise HTTPException(status_code=400, detail="Persona no encontrada")
 
     if perfil["rol"] == "jefe":
         if rol_nuevo != "rt":
@@ -172,39 +171,53 @@ def _crear_o_actualizar_usuario(
         # admin (el jefe ya quedó cubierto arriba)
         if rol_nuevo not in config.ROLES_VALIDOS:
             raise HTTPException(status_code=400, detail="Rol inválido")
-        if persona:
-            if persona["unidad_id"] is None:
-                raise HTTPException(status_code=400, detail="La persona no tiene unidad asignada")
-            unidad_destino = persona["unidad_id"]
-            unidades = [unidad_destino]
-        else:
-            if rol_nuevo == "rt" and not unidades and unidad_id is None:
-                raise HTTPException(status_code=400, detail="Un RT necesita unidad asignada")
-            if unidades:
-                unidad_destino = unidades[0]
+        if rol_nuevo == "rt":
+            if persona:
+                if persona["unidad_id"] is None:
+                    raise HTTPException(status_code=400, detail="La persona no tiene unidad asignada")
+                unidad_destino = persona["unidad_id"]
+                unidades = [unidad_destino]
             else:
-                unidad_destino = unidad_id
+                if not unidades and unidad_id is None:
+                    raise HTTPException(status_code=400, detail="Un RT necesita unidad asignada")
+                unidad_destino = unidades[0] if unidades else unidad_id
+        else:
+            # fuera de 'rt' la persona solo se vincula: las unidades siguen
+            # viniendo de los chips del formulario (no se pisan).
+            unidad_destino = unidades[0] if unidades else unidad_id
 
     existente = _buscar_usuario_por_email(email)
-    if existente is None:
+    nuevo = existente is None
+    if nuevo:
         # Usuario nuevo: generate_link crea el usuario pendiente y envía la invitación.
         seguridad.generar_invitacion(email)
         existente = _buscar_usuario_por_email(email)
-    else:
-        # Usuario ya registrado: reenviamos enlace para definir contraseña.
-        seguridad.enviar_recuperacion(email)
 
     user_id = existente["id"] if existente else None
-    if user_id:
-        filas = database.obtener_perfil(user_id)
-        if filas:
-            campos: dict = {"rol": rol_nuevo, "activo": True, "unidad_id": unidad_destino}
-            if persona_id:
-                campos["persona_id"] = persona_id
-            database.actualizar_perfil(user_id, campos)
-            database.reemplazar_unidades(user_id, unidades or [])
+    if user_id is None:
+        raise HTTPException(status_code=502, detail="No se pudo crear el usuario")
 
-    return {"email": email, "rol": rol_nuevo, "unidad_id": unidad_destino, "unidades": unidades, "persona_id": persona_id}
+    # La escritura del perfil ocurre ANTES de notificar: un fallo de correo
+    # no debe impedir quedar vinculada la persona (usuarios ya existentes).
+    campos: dict = {"rol": rol_nuevo, "activo": True, "unidad_id": unidad_destino}
+    if persona_id:
+        campos["persona_id"] = persona_id
+    if database.obtener_perfil(user_id):
+        database.actualizar_perfil(user_id, campos)
+    else:
+        database.crear_filas("perfiles", [{"user_id": user_id, **campos}])
+    database.reemplazar_unidades(user_id, unidades or [])
+
+    aviso = None
+    if not nuevo:
+        # Usuario ya registrado: reenviamos enlace para definir contraseña.
+        try:
+            seguridad.enviar_recuperacion(email)
+        except HTTPException as exc:
+            aviso = str(exc.detail)
+
+    return {"email": email, "rol": rol_nuevo, "unidad_id": unidad_destino,
+            "unidades": unidades, "persona_id": persona_id, "aviso": aviso}
 
 
 @app.post("/api/invitar")

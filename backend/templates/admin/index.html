@@ -76,7 +76,7 @@
         <div class="fila">
           <label>Email<input id="uEmail" type="email" placeholder="nuevo@ineram.com"></label>
           <label>Rol<select id="uRol" onchange="cambiarInvForm()"></select></label>
-          <label id="uPersonaLabel" class="oculto">Persona (unidad/turno)<select id="uPersona" onchange="personaInvChange()"></select></label>
+          <label id="uPersonaLabel">Persona (unidad/turno)<select id="uPersona" onchange="personaInvChange()"></select></label>
           <span id="uUnidadChips"></span>
           <button class="btn" onclick="crearUsuario()">+ Invitar usuario</button>
         </div>
@@ -367,21 +367,18 @@ function nombreUnidad(id) {
   return u ? u.nombre : `un. ${id}`;
 }
 
-function nombrePersona(id) {
-  const p = PERSONAS_INV.find(x => x.id == id);
-  return p ? p.nombre : (id ? `#${id}` : '—');
-}
-
 function cambiarInvForm() {
-  const rt = document.getElementById('uRol').value === 'rt';
-  document.getElementById('uPersonaLabel').classList.toggle('oculto', !rt);
+  // La persona se puede vincular a cualquier rol; solo en 'rt' además
+  // fija la unidad (bloqueando los chips en renderInvChips).
   renderInvChips();
 }
 
 // La unidad del RT se toma de la persona elegida: los chips quedan bloqueados.
 function personaInvChange() {
   const p = PERSONAS_INV.find(x => x.id == document.getElementById('uPersona').value);
-  if (p && p.unidad_id != null) INV_UNIDADES = new Set([Number(p.unidad_id)]);
+  if (p && p.unidad_id != null && document.getElementById('uRol').value === 'rt') {
+    INV_UNIDADES = new Set([Number(p.unidad_id)]);
+  }
   renderInvChips();
 }
 
@@ -468,7 +465,6 @@ function rolesSelect(actual) {
 }
 
 function personaCelda(u) {
-  if (u.rol !== 'rt') return esc(nombrePersona(u.persona_id));
   const opciones = ['<option value="">— sin vínculo —</option>'];
   for (const p of PERSONAS_INV) {
     const etiqueta = p.unidad_id == null
@@ -498,18 +494,17 @@ async function crearUsuario() {
   const est = document.getElementById('estadoUsuarios');
   est.textContent = 'Enviando invitación…';
   const cuerpo = { email, rol, unidades: [...INV_UNIDADES].map(Number) };
-  if (rol === 'rt') {
-    const pid = document.getElementById('uPersona').value;
-    if (pid) cuerpo.persona_id = Number(pid);
-  }
+  const pid = document.getElementById('uPersona').value;
+  if (pid) cuerpo.persona_id = Number(pid);
   try {
     const r = await api('/api/usuarios', { method: 'POST', body: JSON.stringify(cuerpo) });
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || 'Error'); }
+    const j = await r.json().catch(() => ({}));
     document.getElementById('uEmail').value = '';
     document.getElementById('uPersona').value = '';
     INV_UNIDADES = new Set();
     renderInvChips();
-    est.textContent = `Invitación enviada a ${email}`;
+    est.textContent = (j.aviso ? `Aviso: ${j.aviso}. ` : '') + `Invitación enviada a ${email}`;
     await cargarUsuarios();
   } catch (e) { est.textContent = 'Error: ' + (e.message || e); }
 }
