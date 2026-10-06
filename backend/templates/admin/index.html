@@ -43,13 +43,15 @@
   <!-- Login -->
   <div id="vistaLogin" class="screen-login caja">
     <h2>Acceso de administración</h2>
-    <div class="fila">
-      <label>Email<input id="loginEmail" type="email" autocomplete="username"></label>
-    </div>
-    <div class="fila">
-      <label>Contraseña<input id="loginPass" type="password" autocomplete="current-password"></label>
-    </div>
-    <button class="btn" onclick="login()">Ingresar</button>
+    <form id="formLogin" onsubmit="login(); return false;">
+      <div class="fila">
+        <label>Email<input id="loginEmail" type="email" autocomplete="username"></label>
+      </div>
+      <div class="fila">
+        <label>Contraseña<input id="loginPass" type="password" autocomplete="current-password"></label>
+      </div>
+      <button class="btn" type="submit">Ingresar</button>
+    </form>
     <div class="fila" style="margin-top:10px">
       <a href="#" onclick="recuperar(); return false;">¿Olvidaste tu contraseña?</a>
     </div>
@@ -73,11 +75,8 @@
         <h2>Usuarios del sistema</h2>
         <div class="fila">
           <label>Email<input id="uEmail" type="email" placeholder="nuevo@ineram.com"></label>
-          <label>Rol<select id="uRol" onchange="cambiarInvForm()">
-            <option value="rt">RT</option><option value="jefe">Jefe de unidad</option>
-            <option value="jefe_enfermeria">Jefe de enfermería</option><option value="admin">Admin</option>
-          </select></label>
-          <label id="uPersonaLabel" class="oculto">Persona (unidad/turno)<select id="uPersona"></select></label>
+          <label>Rol<select id="uRol" onchange="cambiarInvForm()"></select></label>
+          <label id="uPersonaLabel" class="oculto">Persona (unidad/turno)<select id="uPersona" onchange="personaInvChange()"></select></label>
           <span id="uUnidadChips"></span>
           <button class="btn" onclick="crearUsuario()">+ Invitar usuario</button>
         </div>
@@ -147,6 +146,13 @@
 
 <script>
 const LS_KEY = 'ineram_admin_token';
+// Catálogo único de roles: value = clave interna (backend/BD), t = etiqueta visible.
+const ROLES = [
+  { v: 'rt', t: 'RT' },
+  { v: 'jefe', t: 'Jefe de unidad' },
+  { v: 'jefe_enfermeria', t: 'Jefe de enfermería' },
+  { v: 'admin', t: 'Admin' }
+];
 let TOKEN = localStorage.getItem(LS_KEY) || '';
 let CFG = null;            // {supabaseUrl, anonKey, roles}
 let UNIDADES = [];         // carga de unidades para selects/chips
@@ -157,6 +163,9 @@ let catalogoActual = 'unidades';
 let CARGOS_F = [];
 let PERSONAS_F = [];
 let unidadesLoaded = false;
+
+document.getElementById('uRol').innerHTML =
+  ROLES.map(r => `<option value="${r.v}">${r.t}</option>`).join('');
 
 function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
@@ -344,9 +353,18 @@ async function cargarPersonas() {
   sel.innerHTML = '<option value="">— sin vínculo —</option>';
   for (const p of PERSONAS_INV) {
     const o = document.createElement('option');
-    o.value = p.id; o.textContent = `${p.nombre} (un. ${p.unidad_id})`;
+    o.value = p.id;
+    o.textContent = p.unidad_id == null
+      ? `${p.nombre} (sin unidad)`
+      : `${p.nombre} (${nombreUnidad(p.unidad_id)})`;
+    if (p.unidad_id == null) o.disabled = true;  // sin unidad no puede ser RT
     sel.appendChild(o);
   }
+}
+
+function nombreUnidad(id) {
+  const u = UNIDADES.find(x => x.id == id);
+  return u ? u.nombre : `un. ${id}`;
 }
 
 function nombrePersona(id) {
@@ -360,21 +378,32 @@ function cambiarInvForm() {
   renderInvChips();
 }
 
+// La unidad del RT se toma de la persona elegida: los chips quedan bloqueados.
+function personaInvChange() {
+  const p = PERSONAS_INV.find(x => x.id == document.getElementById('uPersona').value);
+  if (p && p.unidad_id != null) INV_UNIDADES = new Set([Number(p.unidad_id)]);
+  renderInvChips();
+}
+
 function renderInvChips() {
   const ctn = document.getElementById('uUnidadChips');
   ctn.innerHTML = '';
+  const bloqueada = document.getElementById('uRol').value === 'rt' &&
+    !!document.getElementById('uPersona').value;
   for (const u of UNIDADES) {
     const on = INV_UNIDADES.has(u.id);
     const s = document.createElement('span');
     s.className = 'chip ' + (on ? 'on' : 'off');
     s.textContent = u.nombre;
-    s.style.cursor = 'pointer';
+    s.style.cursor = bloqueada ? 'default' : 'pointer';
     s.style.margin = '2px';
-    s.title = on ? 'Quitar' : 'Asignar';
-    s.onclick = () => {
-      if (on) INV_UNIDADES.delete(u.id); else INV_UNIDADES.add(u.id);
-      renderInvChips();
-    };
+    s.title = bloqueada ? 'La unidad se toma de la persona' : (on ? 'Quitar' : 'Asignar');
+    if (!bloqueada) {
+      s.onclick = () => {
+        if (on) INV_UNIDADES.delete(u.id); else INV_UNIDADES.add(u.id);
+        renderInvChips();
+      };
+    }
     ctn.appendChild(s);
   }
 }
@@ -397,7 +426,7 @@ async function cargarUsuarios() {
         <td>${esc(u.email)}</td>
         <td><select onchange="cambiarRol('${u.user_id}', this.value)">
           ${rolesSelect(u.rol)}</select></td>
-        <td>${esc(nombrePersona(u.persona_id))}</td>
+        <td>${personaCelda(u)}</td>
         <td id="unis_${u.user_id}"></td>
         <td><span class="chip ${activo ? 'on' : 'off'}">${activo ? 'activo' : 'inactivo'}</span></td>
         <td>
@@ -434,9 +463,32 @@ function renderCellUnidades(userId) {
 }
 
 function rolesSelect(actual) {
-  const roles = ['rt', 'jefe', 'jefe_enfermeria', 'admin'];
-  return roles.map(r =>
-    `<option value="${r}" ${r === actual ? 'selected' : ''}>${r}</option>`).join('');
+  return ROLES.map(r =>
+    `<option value="${r.v}" ${r.v === actual ? 'selected' : ''}>${r.t}</option>`).join('');
+}
+
+function personaCelda(u) {
+  if (u.rol !== 'rt') return esc(nombrePersona(u.persona_id));
+  const opciones = ['<option value="">— sin vínculo —</option>'];
+  for (const p of PERSONAS_INV) {
+    const etiqueta = p.unidad_id == null
+      ? `${p.nombre} (sin unidad)` : `${p.nombre} (${nombreUnidad(p.unidad_id)})`;
+    opciones.push(`<option value="${p.id}" ${p.id == u.persona_id ? 'selected' : ''} ${p.unidad_id == null ? 'disabled' : ''}>${esc(etiqueta)}</option>`);
+  }
+  if (u.persona_id && !PERSONAS_INV.some(p => p.id == u.persona_id)) {
+    opciones.push(`<option value="${u.persona_id}" selected>#${u.persona_id} (inactiva)</option>`);
+  }
+  return `<select onchange="cambiarPersona('${u.user_id}', this.value)">${opciones.join('')}</select>`;
+}
+
+async function cambiarPersona(userId, valor) {
+  const body = { persona_id: valor === '' ? null : Number(valor) };
+  const rr = await api('/api/usuarios/' + userId, { method: 'PATCH', body: JSON.stringify(body) });
+  if (!rr.ok) {
+    const jj = await rr.json().catch(() => ({}));
+    alert(jj.detail || 'Error al asignar la persona');
+  }
+  await cargarUsuarios();
 }
 
 async function crearUsuario() {
@@ -454,6 +506,7 @@ async function crearUsuario() {
     const r = await api('/api/usuarios', { method: 'POST', body: JSON.stringify(cuerpo) });
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || 'Error'); }
     document.getElementById('uEmail').value = '';
+    document.getElementById('uPersona').value = '';
     INV_UNIDADES = new Set();
     renderInvChips();
     est.textContent = `Invitación enviada a ${email}`;

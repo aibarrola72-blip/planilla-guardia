@@ -157,6 +157,8 @@ def _crear_o_actualizar_usuario(
         if not mis_unidades:
             raise HTTPException(status_code=403, detail="Su perfil no tiene unidades asignadas")
         if persona:
+            if persona["unidad_id"] is None:
+                raise HTTPException(status_code=400, detail="La persona no tiene unidad asignada")
             if persona["unidad_id"] not in mis_unidades:
                 raise HTTPException(status_code=403, detail="La persona no pertenece a sus unidades")
             unidad_destino = persona["unidad_id"]
@@ -171,6 +173,8 @@ def _crear_o_actualizar_usuario(
         if rol_nuevo not in config.ROLES_VALIDOS:
             raise HTTPException(status_code=400, detail="Rol inválido")
         if persona:
+            if persona["unidad_id"] is None:
+                raise HTTPException(status_code=400, detail="La persona no tiene unidad asignada")
             unidad_destino = persona["unidad_id"]
             unidades = [unidad_destino]
         else:
@@ -255,7 +259,7 @@ def listar_usuarios(request: Request):
 def crear_usuario(body: UsuarioRequest, request: Request):
     """Crea + invita un usuario (web admin / jefe → RT)."""
     info = seguridad.requerir_perfil(request, ROLES_GESTION | {"jefe"})
-    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"], body.unidades)
+    resultado = _crear_o_actualizar_usuario(body.email, body.rol, body.unidad_id, info["perfil"], body.unidades, body.persona_id)
     return {"ok": True, **resultado}
 
 
@@ -281,6 +285,8 @@ def actualizar_usuario(user_id: str, body: UsuarioPatch, request: Request):
         if body.persona_id is not None and body.persona_id != destino.get("persona_id"):
             persona = database.obtener_persona(body.persona_id)
             if persona is None or persona["unidad_id"] not in mis_unidades:
+                if persona is not None and persona["unidad_id"] is None:
+                    raise HTTPException(status_code=400, detail="La persona no tiene unidad asignada")
                 raise HTTPException(status_code=403, detail="La persona no pertenece a sus unidades")
 
     if body.unidades is not None:
@@ -291,6 +297,8 @@ def actualizar_usuario(user_id: str, body: UsuarioPatch, request: Request):
         persona = database.obtener_persona(body.persona_id)
         if persona is None:
             raise HTTPException(status_code=400, detail="Persona no encontrada")
+        if persona["unidad_id"] is None:
+            raise HTTPException(status_code=400, detail="La persona no tiene unidad asignada")
         database.reemplazar_unidades(user_id, [persona["unidad_id"]])
         body.unidad_id = persona["unidad_id"]
 
