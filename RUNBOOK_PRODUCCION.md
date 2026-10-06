@@ -1,7 +1,8 @@
 # Runbook de producción — INERAM (versión con roles)
 
-Código: rama `prueba`, último commit `a793f06` (firmas dinámicas).
-Producción (v1) congelada en `b79b426` / tag `prod-v1-2026-09-24`.
+Código: rama `main` = `68cc0e8` (merge de `prueba` 2026-10-06: Importar
+Excel + reglas de turno + RLS). Producción (v1) congelada en `b79b426` /
+tag `prod-v1-2026-09-24`.
 
 > **Regla de oro**: las migraciones de BD se aplican **antes** de desplegar el
 > backend nuevo. Al aplicarlas, la app v1 instalada queda con el nuevo RLS
@@ -11,28 +12,26 @@ Producción (v1) congelada en `b79b426` / tag `prod-v1-2026-09-24`.
 
 ---
 
-## 1. Migraciones pendientes en producción
+## 1. Migraciones en producción (estado 2026-10-06)
 
-Producción tiene solo 3 migraciones v1:
-`20260921000000_init`, `20260922010000_planilla_ajustes`, `20260922020000_orden_por_turno`.
+Todas las migraciones del repo están aplicadas y registradas en
+`supabase_migrations.schema_migrations`: `20260921000000_init`,
+`20260922010000_planilla_ajustes`, `20260922020000_orden_por_turno`,
+`20260924010000_roles`, `20260924030000_firmas_planilla`,
+`20260924040000_unidades_por_jefe`, `20260925010000_rt_por_persona`,
+`20260925020000_rt_scope_fail_closed`, `20260930000000_turnos_reglas`,
+`20260930010000_enfermeria_solo_lectura`.
 
-Faltan (ambas **aditivas**, re-ejecutables sin romper):
-- `supabase/migrations/20260924010000_roles.sql` — modelo de roles
-  (admin / jefe_enfermeria / jefe / rt) + RLS por rol/unidad + trigger
-  nuevo usuario → `rt`. Compatible con prod: v1 usaba solo rol `'jefe'`,
-  que sigue siendo válido (no falla el nuevo check).
-- `supabase/migrations/20260924030000_firmas_planilla.sql` — firmas del
-  reporte (tabla + seeds `on conflict do nothing` + RLS).
-
-Aplicar (desde `/backend`, con venv activo; `SUPABASE_DB_CONNECTION` está
-en `backend/.env`):
+Aplicar una migración nueva (desde `/backend`, con venv activo;
+`SUPABASE_DB_CONNECTION` está en `backend/.env`):
 
 ```powershell
 $envVals = @{}; Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#=]+)=(.*)$') { $envVals[$matches[1].Trim()] = $matches[2].Trim() } }
 $env:SUPABASE_DB_CONNECTION = $envVals['SUPABASE_DB_CONNECTION']
 
-.venv\Scripts\python.exe ..\migracion\aplicar_sql.py ..\supabase\migrations\20260924010000_roles.sql
-.venv\Scripts\python.exe ..\migracion\aplicar_sql.py ..\supabase\migrations\20260924030000_firmas_planilla.sql
+.venv\Scripts\python.exe ..\migracion\aplicar_sql.py ..\supabase\migrations\<nueva_migracion>.sql
+# registrarla para que no se re-aplique:
+# insert into supabase_migrations.schema_migrations (version, name) values ('<version>','<name>');
 ```
 
 Verificar:
@@ -42,8 +41,7 @@ Verificar:
 .venv\Scripts\python.exe ..\migracion\verificar_migracion.py
 ```
 
-Debería aparecer `firmas_planilla` entre las tablas y las versiones
-`20260924010000` y `20260924030000` registradas.
+Debería aparecer la tabla/versión nueva en `supabase_migrations.schema_migrations`.
 
 ---
 
@@ -134,8 +132,10 @@ $html = Invoke-WebRequest -Uri https://<render-url>/api/reporte/mensual -Method 
 ```
 
 Panel web de admin: `https://<render-url>/admin` → login del usuario `admin`,
-pestañas **Usuarios** (roles), **Catálogos** (incluye Turnos) y **Firmas**
-(cargo / persona / nombre fijo, activar/desactivar).
+pestañas **Usuarios** (roles), **Catálogos** (incluye Turnos), **Firmas**
+(cargo / persona / nombre fijo, activar/desactivar) e **Importar**
+(`POST /api/admin/importar-personas`: alta/edición/bajas masiva de personal
+desde Excel, solo rol `admin`; "Vista previa" = dry-run, "Aplicar" = escribe).
 
 ---
 
@@ -181,5 +181,13 @@ Comprobado hoy:
   volver a sumar `or es_jefe_enfermeria()` en cada `using`/`with check`
   de `cls.*_write`, `per.personas_write_admin`, `aus.*_write_admin`,
   `perf.gestion_admin` y `dunidades.gestion`.
+- `2026-10-06`: aplicadas `20260925020000_rt_scope_fail_closed` (RT sin
+  turno/persona ya no ve personal) y registradas también
+  `20260930000000_turnos_reglas` y `20260930010000_enfermeria_solo_lectura`
+  (ya estaban ejecutadas). Antes de aplicarla, los perfiles RT sin
+  `persona_id` (`aibarrola@zadock.com`, `zadocklogistica@gmail.com`)
+  pasaron de `rol='rt'` a `rol='jefe'`. Rollback de la RLS: restaurar la
+  definición previa de `mi_turno()` (sin `p.rol='rt'`) y de
+  `per.personas_read` / `aus.*_read` / `aus.*_write_unidad`.
 - `backend/.env` contiene claves de **producción**: no usarlas en tests
   locales (el stack local de Supabase está en `127.0.0.1:54xxx`).
