@@ -31,7 +31,13 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.0
+   
 
+flutter_launcher_icons: # <-- Configuración del icono
+  android: "launcher_icon"
+  ios: true
+  image_path: "backend/assets/app_logo.png"
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

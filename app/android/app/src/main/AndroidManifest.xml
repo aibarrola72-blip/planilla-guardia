@@ -4,7 +4,7 @@
          aunque el navegador funcione. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="ineram_app"
+        android:label="planilla_guardia"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
