@@ -113,7 +113,9 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final estado = context.watch<AppState>();
-    final nombre = estado.usuario?.email ?? (estado.esJefe ? 'Jefe de Unidad' : 'Usuario');
+    final nombre = estado.nombre ??
+        estado.usuario?.email ??
+        (estado.esJefe ? 'Jefe de Unidad' : 'Usuario');
     final modulos = estado.esRT
         ? _modulosRT
         : (estado.esAdmin ? _modulos : _modulosSinCatalogos);

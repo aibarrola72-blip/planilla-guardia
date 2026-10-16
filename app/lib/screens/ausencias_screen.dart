@@ -95,7 +95,8 @@ class _AusenciasScreenState extends State<AusenciasScreen> {
             .compareTo(_nombrePersona(b.personaId).toLowerCase());
       });
     } else {
-      lista.sort((a, b) => a.inicio.compareTo(b.inicio));
+      // Descendente: primero el periodo más reciente.
+      lista.sort((a, b) => b.inicio.compareTo(a.inicio));
     }
   }
 

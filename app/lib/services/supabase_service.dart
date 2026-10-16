@@ -58,14 +58,14 @@ class SupabaseService {
     }
   }
 
-  /// Turno de la persona vinculada al usuario (para RT).
-  Future<int?> turnoDePersona(int personaId) async {
-    final datos = await _db
+  /// Turno y nombre de la persona de la planilla vinculada al usuario
+  /// (para RT y para el saludo con nombre real).
+  Future<Map<String, dynamic>?> personaVinculada(int personaId) async {
+    return await _db
         .from('personas')
-        .select('turno_id')
+        .select('turno_id,nombre')
         .eq('id', personaId)
         .maybeSingle();
-    return datos?['turno_id'] as int?;
   }
 
   /// Invita a un nuevo RT (responsable de turno) por correo y lo vincula a una

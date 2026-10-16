@@ -30,6 +30,7 @@ class AppState extends ChangeNotifier {
   int? _unidadId;
   List<int> _unidades = [];
   int? _personaId;
+  String? _nombre;
   int? _miTurnoId;
   bool _activo = true;
 
@@ -44,6 +45,9 @@ class AppState extends ChangeNotifier {
 
   /// Persona de la planilla vinculada al usuario (RT responsable de turno).
   int? get personaId => _personaId;
+
+  /// Nombre de la persona de la planilla vinculada (para el saludo).
+  String? get nombre => _nombre;
 
   /// Turno de la persona vinculada (alcance del RT). null si no aplica.
   int? get miTurnoId => _miTurnoId;
@@ -71,12 +75,14 @@ class AppState extends ChangeNotifier {
     return todas.where((u) => ids.contains(u.id)).toList();
   }
 
-  /// Personas visibles para RT: solo las de sus unidades Y su turno.
+  /// Personas visibles: para RT solo las de sus unidades Y su turno;
+  /// para jefe, todas las de sus unidades (sin filtro de turno).
   List<Persona> personasPermitidas(List<Persona> todas) {
     if (esConsulta) return todas;
     final unidades = _unidades.toSet();
+    final soloTurno = esRT && miTurnoId != null;
     return todas
-        .where((p) => unidades.contains(p.unidadId) && (miTurnoId == null || p.turnoId == miTurnoId))
+        .where((p) => unidades.contains(p.unidadId) && (!soloTurno || p.turnoId == miTurnoId))
         .toList();
   }
 
@@ -88,8 +94,12 @@ class AppState extends ChangeNotifier {
     _personaId = p?['persona_id'] as int?;
     _activo = (p?['activo'] as bool?) ?? true;
     _miTurnoId = null;
+    _nombre = null;
     if (_personaId != null) {
-      _miTurnoId = await SupabaseService.instance.turnoDePersona(_personaId!);
+      final vinculada =
+          await SupabaseService.instance.personaVinculada(_personaId!);
+      _miTurnoId = vinculada?['turno_id'] as int?;
+      _nombre = vinculada?['nombre'] as String?;
     }
     notifyListeners();
   }
